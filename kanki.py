@@ -43,6 +43,21 @@ def parse_lookup_entry(cursor):
     return word[3:], sentence
 
 
+def book_dict(cursor):
+    """Maps book keys to book title and author."""
+    cursor.execute("SELECT id, title, authors FROM BOOK_INFO")
+    book_info = cursor.fetchall()
+    book_dict = dict()
+
+    for book in book_info:
+        id = book[0]
+        title = book[1]
+        author = book[2]
+        book_dict[id] = (title, author)
+
+    return book_dict
+
+
 def main():
     args = parse_args()
 
@@ -55,6 +70,8 @@ def main():
     else:
         word, sentence = parse_lookup_entry(cursor)
         print("Resulting json: " + str(lookup_word(word)))
+
+        book_dict(cursor)
 
 
 if __name__ == "__main__":
