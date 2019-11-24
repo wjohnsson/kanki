@@ -48,12 +48,12 @@ def lookup_word(word):
         # to handle these edge cases as they become known
         print("Response wasn't in the expected format, key " + str(err) +
               " not found")
-        return response
+        raise
     except TypeError as err:
         # If the response isn't a dictionary, it means we get a list of
         # suggested words so looking up keys won't work
         print(word + " not in learners dictionary! " + str(err))
-        return response
+        raise
 
 
 def parse_lookup_entry(cursor):
@@ -82,7 +82,7 @@ def book_dict(cursor):
 def main():
     args = parse_args()
 
-    # Connect to vocabulary database file
+    # Connect to vocabulary database file (vocab.db)
     connection = sqlite3.connect(args.db_path)
     cursor = connection.cursor()
 
@@ -90,14 +90,26 @@ def main():
         print_books(cursor)
     else:
         books = book_dict(cursor)
+        cards = []          # successful lookups
+        failed_words = []   # words not in expected format
+        missing_words = []  # words not in the dictionary
 
         cursor.execute("SELECT word_key, usage FROM LOOKUPS")
         # Grab a few words for testing
         for _ in range(5):
             word, sentence = parse_lookup_entry(cursor)
-            print("Resulting json: " + str(lookup_word(word)) + "\n\n")
+            try:
+                card = lookup_word(word)
+                cards.append(card)
+            except KeyError:
+                failed_words.append(word)
+            except TypeError:
+                missing_words.append(word)
 
-
+        # Result
+        print("Successfully created cards: " + str(cards) +
+              "\nWords not in expected format: " + str(failed_words) +
+              "\nWords not in the dictionary: " + str(missing_words))
 
 if __name__ == "__main__":
     main()
