@@ -7,11 +7,12 @@ def parse_args():
     """Add arguments and parse user input"""
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-b", "--books",
-                            help="list books in which words have been looked" +
-                                 " up",
+                            help="list books in vocabulary file",
                             action="store_true")
-    arg_parser.add_argument("db_path", help="the path to vocab.db")
-    arg_parser.add_argument("title", help="the title of the book to export")
+    arg_parser.add_argument("-t", "--title",
+                            help="the title of the book to export")
+    arg_parser.add_argument("db_path",
+                            help="the path to the vocabulary database")
     return arg_parser.parse_args()
 
 
@@ -121,8 +122,12 @@ def main():
 
     if args.books:
         print_books(cursor)
-    else:
+    elif args.title is not None:
         export_book_vocab(cursor, args.title)
+    else:
+        print("Please specify the title of a book using -t TITLE." +
+              "\nTo see which books are available for export " +
+              "run kanki with the argument -b (or --books)")
 
 
 if __name__ == "__main__":
