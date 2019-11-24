@@ -7,9 +7,11 @@ def parse_args():
     """Add arguments and parse user input"""
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-b", "--books",
-                            help="list books in which words have been looked up",
+                            help="list books in which words have been looked" +
+                                 " up",
                             action="store_true")
     arg_parser.add_argument("db_path", help="the path to vocab.db")
+    arg_parser.add_argument("title", help="the title of the book to export")
     return arg_parser.parse_args()
 
 
@@ -59,40 +61,49 @@ def lookup_word(word):
 def parse_lookup_entry(cursor):
     """Parses a row in the vocab.db LOOKUPS table, returning the word itself and
     the sentence in which it was looked up"""
-    word, sentence = cursor.fetchone()
+    word, book_key, sentence = cursor.fetchone()
 
     # remove 'en:' from word
     return word[3:], sentence
 
 
 def book_dict(cursor):
-    """Maps book keys to book title and author and returns it."""
+    """Create two maps, one from id to book and one from title to book id"""
     cursor.execute("SELECT id, title, authors FROM BOOK_INFO")
     book_info = cursor.fetchall()
-    book_dict = dict()
+    key_to_book = dict()
+    title_to_id = dict()
 
     for book in book_info:
         id = book[0]
         title = book[1]
         author = book[2]
-        book_dict[id] = (title, author)
+        key_to_book[id] = (title, author)
+        title_to_id[title] = id
 
-    return book_dict
+    return key_to_book, title_to_id
 
 
-def export_db(cursor):
+def export_db(cursor, book_title):
     """Will eventually export the vocabulary database to an Anki-readable
     format"""
+    key_to_book, title_to_id = book_dict(cursor)
+    book_key = title_to_id[book_title]
+
     cards = []          # successful lookups
     failed_words = []   # words not in expected format
     missing_words = []  # words not in the dictionary
 
-    cursor.execute("SELECT word_key, usage FROM LOOKUPS")
+    # Grab all words from the given book
+    cursor.execute("SELECT word_key, book_key, usage FROM LOOKUPS" +
+                   "WHERE book_key = '" + book_key + "'")
     # Grab a few words for testing
     for _ in range(5):
         word, sentence = parse_lookup_entry(cursor)
         try:
             card = lookup_word(word)
+            card["book_title"] = book_title
+            card["author"] = key_to_book[book_key]
             cards.append(card)
         except KeyError:
             failed_words.append(word)
@@ -116,7 +127,7 @@ def main():
     if args.books:
         print_books(cursor)
     else:
-        export_db(cursor)
+        export_db(cursor, args.title)
 
 
 if __name__ == "__main__":
