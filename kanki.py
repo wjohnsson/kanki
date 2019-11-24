@@ -25,18 +25,39 @@ def print_books(cursor):
 
 
 def lookup_word(word):
+    """Looks up a word in the dictionary, returning a card with the containing
+    information"""
     api_key = "your_api_key_here"
     api_request = "https://www.dictionaryapi.com/api/v3/references/learners/json/" + word + "?key=" + api_key
 
     print("Looking up word... " + word)
     response = requests.get(api_request)
     print("Status code: " + str(response.status_code))
-    return response.json()
+
+    response = response.json()
+
+    card = dict()
+    try:
+        # Take the interesting parts of the response
+        card["word"] = response[0]["meta"]["id"]
+        card["shortdef"] = response[0]["shortdef"]
+        card["ipa"] = response[0]["hwi"]["prs"][0]["ipa"]
+        return card
+    except KeyError as err:
+        # Sometimes the response doesn't have the format we expected, will have
+        # to handle these edge cases as they become known
+        print("Response wasn't in the expected format, key " + str(err) +
+              " not found")
+        return response
+    except TypeError as err:
+        # If the response isn't a dictionary, it means we get a list of
+        # suggested words so looking up keys won't work
+        print(word + " not in learners dictionary! " + str(err))
+        return response
 
 
 def parse_lookup_entry(cursor):
-    """Parses a row in the LOOKUPS table"""
-    cursor.execute("SELECT word_key, usage FROM LOOKUPS")
+    """Parses a row in the vocab.db LOOKUPS table"""
     word, sentence = cursor.fetchone()
 
     # remove 'en:' from word
@@ -68,10 +89,14 @@ def main():
     if args.books:
         print_books(cursor)
     else:
-        word, sentence = parse_lookup_entry(cursor)
-        print("Resulting json: " + str(lookup_word(word)))
+        books = book_dict(cursor)
 
-        book_dict(cursor)
+        cursor.execute("SELECT word_key, usage FROM LOOKUPS")
+        # Grab a few words for testing
+        for _ in range(5):
+            word, sentence = parse_lookup_entry(cursor)
+            print("Resulting json: " + str(lookup_word(word)) + "\n\n")
+
 
 
 if __name__ == "__main__":
