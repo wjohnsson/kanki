@@ -58,15 +58,6 @@ def lookup_word(word):
         raise
 
 
-def parse_lookup_entry(cursor):
-    """Parses a row in the vocab.db LOOKUPS table, returning the word itself and
-    the sentence in which it was looked up"""
-    word, book_key, sentence = cursor.fetchone()
-
-    # remove 'en:' from word
-    return word[3:], sentence
-
-
 def book_dict(cursor):
     """Create two maps, one from id to book and one from title to book id"""
     cursor.execute("SELECT id, title, authors FROM BOOK_INFO")
@@ -84,7 +75,7 @@ def book_dict(cursor):
     return key_to_book, title_to_id
 
 
-def export_db(cursor, book_title):
+def export_book_vocab(cursor, book_title):
     """Will eventually export the vocabulary database to an Anki-readable
     format"""
     key_to_book, title_to_id = book_dict(cursor)
@@ -96,12 +87,16 @@ def export_db(cursor, book_title):
 
     # Grab all words from the given book
     cursor.execute("SELECT word_key, book_key, usage FROM LOOKUPS" +
-                   "WHERE book_key = '" + book_key + "'")
+                   " WHERE book_key = '" + book_key + "'")
+    lookups = cursor.fetchall()
     # Grab a few words for testing
-    for _ in range(5):
-        word, sentence = parse_lookup_entry(cursor)
+    for lookup in lookups[:5]:
+        word = lookup[0][3:]  # remove 'en: ' from word_key
+        sentence = lookup[2]  # the sentence in which the word was looked up
+
         try:
             card = lookup_word(word)
+            card["sentence"] = sentence
             card["book_title"] = book_title
             card["author"] = key_to_book[book_key]
             cards.append(card)
@@ -127,7 +122,7 @@ def main():
     if args.books:
         print_books(cursor)
     else:
-        export_db(cursor, args.title)
+        export_book_vocab(cursor, args.title)
 
 
 if __name__ == "__main__":
