@@ -28,8 +28,8 @@ def print_books(cursor):
 
 
 def lookup_word(word):
-    """Looks up a word in the dictionary, returning a card with the containing
-    information"""
+    """ Looks up a word in the dictionary, returning a card with the word itself,
+    definition and pronounciation"""
     api_key = "your_api_key_here"
     api_request = "https://www.dictionaryapi.com/api/v3/references/learners/json/" + word + "?key=" + api_key
 
@@ -60,20 +60,23 @@ def lookup_word(word):
 
 
 def book_dict(cursor):
-    """Create two maps, one from id to book and one from title to book id"""
+    """Return two dictionaries, one from book key to book title and author
+    aswell as one from book title to book key"""
     cursor.execute("SELECT id, title, authors FROM BOOK_INFO")
     book_info = cursor.fetchall()
     key_to_book = dict()
-    title_to_id = dict()
+    title_to_key = dict()
 
     for book in book_info:
-        id = book[0]
+        # format is (book_key, title, author)
+        book_key = book[0]
         title = book[1]
         author = book[2]
-        key_to_book[id] = (title, author)
-        title_to_id[title] = id
 
-    return key_to_book, title_to_id
+        key_to_book[book_key] = (title, author)
+        title_to_key[title] = book_key
+
+    return key_to_book, title_to_key
 
 
 def export_book_vocab(cursor, book_title):
