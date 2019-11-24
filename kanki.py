@@ -57,7 +57,8 @@ def lookup_word(word):
 
 
 def parse_lookup_entry(cursor):
-    """Parses a row in the vocab.db LOOKUPS table"""
+    """Parses a row in the vocab.db LOOKUPS table, returning the word itself and
+    the sentence in which it was looked up"""
     word, sentence = cursor.fetchone()
 
     # remove 'en:' from word
@@ -65,7 +66,7 @@ def parse_lookup_entry(cursor):
 
 
 def book_dict(cursor):
-    """Maps book keys to book title and author."""
+    """Maps book keys to book title and author and returns it."""
     cursor.execute("SELECT id, title, authors FROM BOOK_INFO")
     book_info = cursor.fetchall()
     book_dict = dict()
@@ -79,6 +80,32 @@ def book_dict(cursor):
     return book_dict
 
 
+def export_db(cursor):
+    """Will eventually export the vocabulary database to an Anki-readable
+    format"""
+    cards = []          # successful lookups
+    failed_words = []   # words not in expected format
+    missing_words = []  # words not in the dictionary
+
+    cursor.execute("SELECT word_key, usage FROM LOOKUPS")
+    # Grab a few words for testing
+    for _ in range(5):
+        word, sentence = parse_lookup_entry(cursor)
+        try:
+            card = lookup_word(word)
+            cards.append(card)
+        except KeyError:
+            failed_words.append(word)
+        except TypeError:
+            missing_words.append(word)
+
+    # Result
+    print("\n#################" +
+          "\nSuccessfully created cards: " + str(cards) +
+          "\nWords not in expected format: " + str(failed_words) +
+          "\nWords not in the dictionary: " + str(missing_words))
+
+
 def main():
     args = parse_args()
 
@@ -89,27 +116,8 @@ def main():
     if args.books:
         print_books(cursor)
     else:
-        books = book_dict(cursor)
-        cards = []          # successful lookups
-        failed_words = []   # words not in expected format
-        missing_words = []  # words not in the dictionary
+        export_db(cursor)
 
-        cursor.execute("SELECT word_key, usage FROM LOOKUPS")
-        # Grab a few words for testing
-        for _ in range(5):
-            word, sentence = parse_lookup_entry(cursor)
-            try:
-                card = lookup_word(word)
-                cards.append(card)
-            except KeyError:
-                failed_words.append(word)
-            except TypeError:
-                missing_words.append(word)
-
-        # Result
-        print("Successfully created cards: " + str(cards) +
-              "\nWords not in expected format: " + str(failed_words) +
-              "\nWords not in the dictionary: " + str(missing_words))
 
 if __name__ == "__main__":
     main()
