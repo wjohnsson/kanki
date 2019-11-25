@@ -29,7 +29,7 @@ def print_books(cursor):
 
 def lookup_word(word):
     """ Looks up a word in the dictionary, returning a card with the word itself,
-    definition and pronounciation"""
+    definition and pronunciation"""
     api_key = "your_api_key_here"
     api_request = "https://www.dictionaryapi.com/api/v3/references/learners/json/" + word + "?key=" + api_key
 
@@ -61,14 +61,13 @@ def lookup_word(word):
 
 def book_dict(cursor):
     """Return two dictionaries, one from book key to book title and author
-    aswell as one from book title to book key"""
+    as well as one from book title to book key"""
     cursor.execute("SELECT id, title, authors FROM BOOK_INFO")
     book_info = cursor.fetchall()
     key_to_book = dict()
     title_to_key = dict()
 
     for book in book_info:
-        # format is (book_key, title, author)
         book_key = book[0]
         title = book[1]
         author = book[2]
@@ -77,6 +76,14 @@ def book_dict(cursor):
         title_to_key[title] = book_key
 
     return key_to_book, title_to_key
+
+
+def write_card():
+    card = {'word': 'edify', 'shortdef': ['to teach (someone) in a way that improves the mind or character'], 'ipa': 'ˈɛdəˌfaɪ', 'sentence': 'Parsons, his attention caught by the trumpet call, sat listening with a sort of gaping solemnity, a sort of edified boredom. ', 'book_title': '1984', 'author': 'Orwell, George'}
+    output = open("kanki.txt", "w", encoding="utf-8")
+
+    # Surround all entries in quotes and write in same order as in Anki
+    output.write('"{0}"'.format('", "'.join([card["word"], card["ipa"], card["sentence"], str(card["shortdef"]), card["book_title"], card["author"]])))
 
 
 def export_book_vocab(cursor, book_title):
@@ -102,7 +109,7 @@ def export_book_vocab(cursor, book_title):
             card = lookup_word(word)
             card["sentence"] = sentence
             card["book_title"] = book_title
-            card["author"] = key_to_book[book_key]
+            card["author"] = key_to_book[book_key][1]
             cards.append(card)
         except KeyError:
             failed_words.append(word)
