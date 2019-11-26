@@ -78,17 +78,26 @@ def book_dict(cursor):
     return key_to_book, title_to_key
 
 
-def write_card():
-    card = {'word': 'edify', 'shortdef': ['to teach (someone) in a way that improves the mind or character'], 'ipa': 'ˈɛdəˌfaɪ', 'sentence': 'Parsons, his attention caught by the trumpet call, sat listening with a sort of gaping solemnity, a sort of edified boredom. ', 'book_title': '1984', 'author': 'Orwell, George'}
+def write_to_export_file(cards):
+    """Write cards to an Anki readable format."""
+    # Anki accepts plaintext files with fields separated by commas
     output = open("kanki.txt", "w", encoding="utf-8")
 
-    # Surround all entries in quotes and write in same order as in Anki
-    output.write('"{0}"'.format('", "'.join([card["word"], card["ipa"], card["sentence"], str(card["shortdef"]), card["book_title"], card["author"]])))
+    for card in cards:
+        # A word may have multiple definitions, join them with a semicolon
+        definitions = "; ".join(card["shortdef"])
+        # Surround all fields in quotes and write in same order as in Anki
+        output.write('"{0}"'.format('", "'.join(
+            [card["word"],
+             card["ipa"],
+             card["sentence"].replace('"', "'"),  # escape " in sentences
+             definitions,
+             card["book_title"],
+             card["author"]])) + "\n")
 
 
 def export_book_vocab(cursor, book_title):
-    """Will eventually export the vocabulary database to an Anki-readable
-    format"""
+    """Export all words from the given book."""
     key_to_book, title_to_id = book_dict(cursor)
     book_key = title_to_id[book_title]
 
@@ -116,9 +125,11 @@ def export_book_vocab(cursor, book_title):
         except TypeError:
             missing_words.append(word)
 
+    write_to_export_file(cards)
+
     # Result
-    print("\n#################" +
-          "\nSuccessfully created cards: " + str(cards) +
+    print("\n####  EXPORT INFO  ####" +
+          "\nCards: " + str(cards) +
           "\nWords not in expected format: " + str(failed_words) +
           "\nWords not in the dictionary: " + str(missing_words))
 
