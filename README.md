@@ -32,7 +32,7 @@ git clone https://github.com/wjohnsson/kanki.git
 
 - kanki will output a file called `kanki.txt` which you can then import (`file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to) and have fields separated by comma.
 
-![Preview of what an import should look like](import.png)
+![Preview of what an import should look like](import.PNG)
 
 ### Import kanki card type
 The first time you use kanki you must import the card type so you get the correct fields and formatting. In the Anki deck view press `Import File` and select `kanki.apkg` provided in the repo. This will create a new deck containing one sample card with the kanki card type. 
