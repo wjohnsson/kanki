@@ -24,7 +24,7 @@ kanki uses python and [Requests](https://requests.readthedocs.io/en/master/) so 
 git clone https://github.com/wjohnsson/kanki.git
 ```
 
-- If it's the first time you use kanki you must first [import the kanki card type](#import-anki-card-type).
+- If it's the first time you use kanki you must first [import the kanki card type](#import-kanki-card-type).
 
 - Plug in your Kindle and search for `vocab.db` (mine was in a hidden folder called `system/vocabulary/`).
 
