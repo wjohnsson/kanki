@@ -33,9 +33,13 @@ def lookup_word(word):
     api_key = "your_api_key_here"
     api_request = "https://www.dictionaryapi.com/api/v3/references/learners/json/" + word + "?key=" + api_key
 
-    print("Looking up word... " + word)
+    print("Looking up word: " + word + "... ")
     response = requests.get(api_request)
-    print("Status code: " + str(response.status_code))
+
+    if response.status_code != 200:
+        print("\nError when querying Merriam Webster's Dictionary API.")
+    else:
+        print("OK")
 
     response = response.json()
 
@@ -49,13 +53,13 @@ def lookup_word(word):
     except KeyError as err:
         # Sometimes the response doesn't have the format we expected, will have
         # to handle these edge cases as they become known
-        print("Response wasn't in the expected format, key " + str(err) +
-              " not found")
+        print("Response wasn't in the expected format. Reason: key "
+              + str(err) + " not found")
         raise
     except TypeError as err:
         # If the response isn't a dictionary, it means we get a list of
         # suggested words so looking up keys won't work
-        print(word + " not in learners dictionary! " + str(err))
+        print(word + " not found in Merriam Webster's Learner's dictionary!")
         raise
 
 
@@ -133,9 +137,9 @@ def export_book_vocab(cursor, book_title, amount=-1):
 
     # Result
     print("\n####  EXPORT INFO  ####" +
-          "\nCards: " + str(cards) +
-          "\nWords not in expected format: " + str(failed_words) +
-          "\nWords not in the dictionary: " + str(missing_words))
+          "\n  Succesfully exported " + str(len(cards)) + " cards"
+          "\n  Words not in expected format: " + str(failed_words) +
+          "\n  Words not in the dictionary: " + str(missing_words))
 
 
 def main():
@@ -148,7 +152,7 @@ def main():
     if args.books:
         print_books(cursor)
     elif args.title is not None:
-        export_book_vocab(cursor, args.title, 10)
+        export_book_vocab(cursor, args.title)
     else:
         print("Please specify the title of a book using -t TITLE." +
               "\nTo see which books are available for export " +
