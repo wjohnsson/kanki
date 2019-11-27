@@ -96,7 +96,7 @@ def write_to_export_file(cards):
              card["author"]])) + "\n")
 
 
-def export_book_vocab(cursor, book_title):
+def export_book_vocab(cursor, book_title, amount=-1):
     """Export all words from the given book."""
     key_to_book, title_to_id = book_dict(cursor)
     book_key = title_to_id[book_title]
@@ -109,8 +109,12 @@ def export_book_vocab(cursor, book_title):
     cursor.execute("SELECT word_key, book_key, usage FROM LOOKUPS" +
                    " WHERE book_key = '" + book_key + "'")
     lookups = cursor.fetchall()
-    # Grab a few words for testing
-    for lookup in lookups[:5]:
+
+    # For testing: specify the amount of words you want to export
+    if amount >= -1:
+        lookups = lookups[:amount]
+
+    for lookup in lookups:
         word = lookup[0][3:]  # remove 'en: ' from word_key
         sentence = lookup[2]  # the sentence in which the word was looked up
 
@@ -144,7 +148,7 @@ def main():
     if args.books:
         print_books(cursor)
     elif args.title is not None:
-        export_book_vocab(cursor, args.title)
+        export_book_vocab(cursor, args.title, 10)
     else:
         print("Please specify the title of a book using -t TITLE." +
               "\nTo see which books are available for export " +
