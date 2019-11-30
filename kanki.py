@@ -27,6 +27,25 @@ def print_books(cursor):
         print("  " + b)
 
 
+def get_pronunciation(response):
+    """Return pronunciation from response"""
+    # Where to find the pronunciation differs from word to word
+    prs = response[0]["hwi"].get("prs", None)
+    altprs = response[0]["hwi"].get("altprs", None)
+
+    if altprs is not None:
+        ipa = altprs[0]["ipa"]
+    if prs is not None:
+        # Choose prs by default
+        ipa = prs[0]["ipa"]
+
+    if altprs is None and prs is None:
+        # Couldn't find it in "hwi", it sometimes is in "vrs"
+        ipa = response[0]["vrs"][0]["prs"][0]["ipa"]
+
+    return ipa
+
+
 def lookup_word(word):
     """ Looks up a word in the dictionary, returning a card with the word itself,
     definition and pronunciation"""
@@ -48,7 +67,7 @@ def lookup_word(word):
         # Take the interesting parts of the response
         card["word"] = response[0]["meta"]["id"].replace(":1", "")
         card["shortdef"] = response[0]["shortdef"]
-        card["ipa"] = response[0]["hwi"]["prs"][0]["ipa"]
+        card["ipa"] = get_pronunciation(response)
         return card
     except KeyError as err:
         # Sometimes the response doesn't have the format we expected, will have
