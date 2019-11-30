@@ -46,7 +46,7 @@ def lookup_word(word):
     card = dict()
     try:
         # Take the interesting parts of the response
-        card["word"] = response[0]["meta"]["id"]
+        card["word"] = response[0]["meta"]["id"].replace(":1", "")
         card["shortdef"] = response[0]["shortdef"]
         card["ipa"] = response[0]["hwi"]["prs"][0]["ipa"]
         return card
