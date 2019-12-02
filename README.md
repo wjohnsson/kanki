@@ -30,7 +30,7 @@ git clone https://github.com/wjohnsson/kanki.git
 
 - run the script, eg. `python kanki.py --title "1984" ./vocab.db`
 
-- kanki will export to a file called `kanki.txt` which you can then import (`file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to) and have fields separated by comma.
+- kanki will export to a file called `kanki.txt` which you can then import (`file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to), separate fields by comma and allow HTML in fields.
 
 ![Preview of what an import should look like](import.PNG)
 

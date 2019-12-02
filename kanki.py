@@ -75,7 +75,7 @@ def lookup_word(word):
         print("Response wasn't in the expected format. Reason: key "
               + str(err) + " not found")
         raise
-    except TypeError as err:
+    except TypeError:
         # If the response isn't a dictionary, it means we get a list of
         # suggested words so looking up keys won't work
         print(word + " not found in Merriam Webster's Learner's dictionary!")
@@ -109,13 +109,16 @@ def write_to_export_file(cards):
     for card in cards:
         # A word may have multiple definitions, join them with a semicolon
         definitions = "; ".join(card["shortdef"])
+
+        # If there are double quotes in any of the fields,
+        # the import might not work?
         # Surround all fields in quotes and write in same order as in Anki
         output.write('"{0}"'.format('", "'.join(
             [card["word"],
              card["ipa"],
-             card["sentence"].replace('"', "'"),  # escape " in sentences
+             card["sentence"].replace('"', "'"),
              definitions,
-             card["book_title"],
+             card["book_title"].replace('"', "'"),
              card["author"]])) + "\n")
 
 
@@ -143,7 +146,7 @@ def export_book_vocab(cursor, book_title, amount=-1):
 
         try:
             card = lookup_word(word)
-            card["sentence"] = sentence
+            card["sentence"] = sentence.replace(word, "<b>" + word + "</b>")
             card["book_title"] = book_title
             card["author"] = key_to_book[book_key][1]
             cards.append(card)
@@ -171,7 +174,7 @@ def main():
     if args.books:
         print_books(cursor)
     elif args.title is not None:
-        export_book_vocab(cursor, args.title, 10)
+        export_book_vocab(cursor, args.title)
     else:
         print("Please specify the title of a book using -t TITLE." +
               "\nTo see which books are available for export " +
