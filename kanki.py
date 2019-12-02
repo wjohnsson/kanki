@@ -65,7 +65,7 @@ def lookup_word(word):
     card = dict()
     try:
         # Take the interesting parts of the response
-        card["word"] = response[0]["meta"]["id"].replace(":1", "")
+        card["word"] = response[0]["meta"]["stems"][0]
         card["shortdef"] = response[0]["shortdef"]
         card["ipa"] = get_pronunciation(response)
         return card
@@ -171,7 +171,7 @@ def main():
     if args.books:
         print_books(cursor)
     elif args.title is not None:
-        export_book_vocab(cursor, args.title)
+        export_book_vocab(cursor, args.title, 10)
     else:
         print("Please specify the title of a book using -t TITLE." +
               "\nTo see which books are available for export " +
