@@ -17,7 +17,7 @@ optional arguments:
                         the title of the book to export
 ```
 
-kanki uses python and [Requests](https://requests.readthedocs.io/en/master/) so first make sure you have those installed. 
+kanki uses python and [Requests](https://requests.readthedocs.io/en/master/) so first make sure you have those installed eg. by running `pip install requests`.
 
 - Clone the repository
 ```
@@ -28,9 +28,9 @@ git clone https://github.com/wjohnsson/kanki.git
 
 - Plug in your Kindle and search for `vocab.db` (mine was in a hidden folder called `system/vocabulary/`).
 
-- run the script, i.e. `python kanki.py --title "1984" ./vocab.db`
+- run the script, eg. `python kanki.py --title "1984" ./vocab.db`
 
-- kanki will output a file called `kanki.txt` which you can then import (`file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to) and have fields separated by comma.
+- kanki will export to a file called `kanki.txt` which you can then import (`file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to) and have fields separated by comma.
 
 ![Preview of what an import should look like](import.PNG)
 
