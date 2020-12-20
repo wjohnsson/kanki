@@ -1,6 +1,7 @@
 import argparse
 import sqlite3
 import requests
+from collections import defaultdict
 
 
 def main():
@@ -110,13 +111,14 @@ def lookup_word(word):
         raise
 
 
-def book_dict(cursor):
+def book_dicts(cursor):
     """Return two dictionaries, one from book key to book title and author
-    as well as one from book title to book key"""
+    as well as one from book title to book keys."""
     cursor.execute("SELECT id, title, authors FROM BOOK_INFO")
     book_info = cursor.fetchall()
     key_to_book = dict()
-    title_to_key = dict()
+    # One book can have multiple keys (maybe has something to do with Kindle versions?)
+    title_to_keys = defaultdict(list)
 
     for book in book_info:
         book_key = book[0]
@@ -124,9 +126,9 @@ def book_dict(cursor):
         author = book[2]
 
         key_to_book[book_key] = (title, author)
-        title_to_key[title] = book_key
+        title_to_keys[title].append(book_key)
 
-    return key_to_book, title_to_key
+    return key_to_book, title_to_keys
 
 
 def write_to_export_file(cards):
@@ -152,32 +154,33 @@ def write_to_export_file(cards):
 
 def export_book_vocab(cursor, book_title, amount=-1):
     """Export all words from the given book."""
-    key_to_book, title_to_id = book_dict(cursor)
-    book_key = title_to_id[book_title]
+    key_to_book, title_to_keys = book_dicts(cursor)
+    book_keys = title_to_keys[book_title]
 
     cards = []  # successful lookups
     failed_words = []  # words not in expected format
     missing_words = []  # words not in the dictionary
 
     # Grab all words from the given book
+    condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
     cursor.execute("SELECT word_key, book_key, usage FROM LOOKUPS" +
-                   " WHERE book_key = '" + book_key + "'")
-    lookups = cursor.fetchall()
+                   " WHERE book_key = " + condition)
+    words = cursor.fetchall()
 
     # For testing: specify the amount of words you want to export
     if amount >= -1:
-        lookups = lookups[:amount]
+        words = words[:amount]
 
-    for lookup in lookups:
-        assert lookup[0][:2] == "en", "Only english words are supported."
-        word = lookup[0][3:]  # remove 'en:' from word_key
-        sentence = lookup[2]  # the sentence in which the word was looked up
+    for word in words:
+        assert word[0][:2] == "en", "Only english words are supported."
+        word = word[0][3:]  # remove 'en:' from word_key
+        sentence = word[2]  # the sentence in which the word was looked up
 
         try:
             card = lookup_word(word)
             card.sentence = sentence.replace(word, "<b>" + word + "</b>")
             card.book_title = book_title
-            card.author = key_to_book[book_key][1]
+            card.author = key_to_book[book_keys[0]][1]
             cards.append(card)
         except KeyError:
             failed_words.append(word)
