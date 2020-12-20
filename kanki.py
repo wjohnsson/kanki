@@ -10,10 +10,10 @@ def main():
     connection = sqlite3.connect(args.db_path)
     cursor = connection.cursor()
 
-    if args.books:
+    if args.list:
         print_books(cursor)
     elif args.title is not None:
-        export_book_vocab(cursor, args.title)
+        export_book_vocab(cursor, args.title, 10)
     else:
         print("Please specify the title of a book using -t TITLE." +
               "\nTo see which books are available for export " +
@@ -44,28 +44,39 @@ def print_books(cursor):
         print("  " + b)
 
 
+class Card:
+    def __init__(self, word=None, ipa=None, shortdef=None, sentence=None, book_title=None, author=None):
+        self.word = word
+        self.ipa = ipa  # pronunciation
+        self.shortdef = shortdef
+        self.sentence = sentence
+        self.book_title = book_title
+        self.author = author
+
+
 def get_pronunciation(response):
     """Return pronunciation from response."""
     # Where to find the pronunciation differs from word to word
-    prs = response[0]["hwi"].get("prs", None)
-    altprs = response[0]["hwi"].get("altprs", None)
+    prs = response["hwi"].get("prs", None)
+    altprs = response["hwi"].get("altprs", None)
 
-    if altprs is not None:
-        ipa = altprs[0]["ipa"]
+    ipa = None
     if prs is not None:
-        # Choose prs by default
+        # Prefer to use prs
         ipa = prs[0]["ipa"]
+    elif altprs is not None:
+        ipa = altprs[0]["ipa"]
 
     if altprs is None and prs is None:
         # Couldn't find it in "hwi", it sometimes is in "vrs"
-        ipa = response[0]["vrs"][0]["prs"][0]["ipa"]
+        ipa = response["vrs"][0]["prs"][0]["ipa"]
 
     return ipa
 
 
 def lookup_word(word):
     """ Looks up a word in the dictionary, returning a card with the word itself,
-    definition and pronunciation"""
+    as well as its definition and pronunciation."""
     api_key = "your_api_key_here"
     api_request = "https://www.dictionaryapi.com/api/v3/references/learners/json/" + word + "?key=" + api_key
 
@@ -77,14 +88,14 @@ def lookup_word(word):
     else:
         print("OK")
 
-    response = response.json()
+    response = response.json()[0]
 
-    card = dict()
+    card = Card()
     try:
         # Take the interesting parts of the response
-        card["word"] = response[0]["meta"]["stems"][0]
-        card["shortdef"] = response[0]["shortdef"]
-        card["ipa"] = get_pronunciation(response)
+        card.word = response["meta"]["stems"][0]
+        card.shortdef = response["shortdef"]
+        card.ipa = get_pronunciation(response)
         return card
     except KeyError as err:
         # Sometimes the response doesn't have the format we expected, will have
@@ -119,24 +130,24 @@ def book_dict(cursor):
 
 
 def write_to_export_file(cards):
-    """Write cards to an Anki readable format."""
+    """Write all cards to a file in an Anki readable format."""
     # Anki accepts plaintext files with fields separated by commas
     output = open("kanki.txt", "w", encoding="utf-8")
 
     for card in cards:
-        # A word may have multiple definitions, join them with a semicolon
-        definitions = "; ".join(card["shortdef"])
+        # A word may have multiple definitions, join them with a semicolon.
+        definitions = "; ".join(card.shortdef)
 
-        # If there are double quotes in any of the fields,
-        # the import might not work?
-        # Surround all fields in quotes and write in same order as in Anki
+        # Surround all fields in quotes and write in same order as in Anki.
+        # Also make sure all double quotes are single quotes in the file
+        # so that it is readable by Anki
         output.write('"{0}"'.format('", "'.join(
-            [card["word"],
-             card["ipa"],
-             card["sentence"].replace('"', "'"),
+            [card.word,
+             card.ipa,
+             card.sentence.replace('"', "'"),
              definitions,
-             card["book_title"].replace('"', "'"),
-             card["author"]])) + "\n")
+             card.book_title.replace('"', "'"),
+             card.author])) + "\n")
 
 
 def export_book_vocab(cursor, book_title, amount=-1):
@@ -158,14 +169,15 @@ def export_book_vocab(cursor, book_title, amount=-1):
         lookups = lookups[:amount]
 
     for lookup in lookups:
-        word = lookup[0][3:]  # remove 'en: ' from word_key
+        assert lookup[0][:2] == "en", "Only english words are supported."
+        word = lookup[0][3:]  # remove 'en:' from word_key
         sentence = lookup[2]  # the sentence in which the word was looked up
 
         try:
             card = lookup_word(word)
-            card["sentence"] = sentence.replace(word, "<b>" + word + "</b>")
-            card["book_title"] = book_title
-            card["author"] = key_to_book[book_key][1]
+            card.sentence = sentence.replace(word, "<b>" + word + "</b>")
+            card.book_title = book_title
+            card.author = key_to_book[book_key][1]
             cards.append(card)
         except KeyError:
             failed_words.append(word)
@@ -176,9 +188,9 @@ def export_book_vocab(cursor, book_title, amount=-1):
 
     # Result
     print("\n####  EXPORT INFO  ####" +
-          "\n  Succesfully exported " + str(len(cards)) + " cards" +
+          "\n  Successfully exported " + str(len(cards)) + " cards" +
           "\n  Words not in expected format: " + str(failed_words) +
-          "\n  Words not in the dictionary: " + str(missing_words))
+          "\n  Words not in the online dictionary: " + str(missing_words))
 
 
 if __name__ == "__main__":
