@@ -3,10 +3,27 @@ import sqlite3
 import requests
 
 
+def main():
+    args = parse_args()
+
+    # Connect to vocabulary database file (vocab.db)
+    connection = sqlite3.connect(args.db_path)
+    cursor = connection.cursor()
+
+    if args.books:
+        print_books(cursor)
+    elif args.title is not None:
+        export_book_vocab(cursor, args.title)
+    else:
+        print("Please specify the title of a book using -t TITLE." +
+              "\nTo see which books are available for export " +
+              "run kanki with the argument -l (or --list)")
+
+
 def parse_args():
     """Add arguments and parse user input"""
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-b", "--books",
+    arg_parser.add_argument("-l", "--list",
                             help="list books in vocabulary file",
                             action="store_true")
     arg_parser.add_argument("-t", "--title",
@@ -23,12 +40,12 @@ def print_books(cursor):
     books = set([book_name[0] for book_name in cursor.fetchall()])
 
     print("Books:")
-    for b in books:
+    for b in sorted(books):
         print("  " + b)
 
 
 def get_pronunciation(response):
-    """Return pronunciation from response"""
+    """Return pronunciation from response."""
     # Where to find the pronunciation differs from word to word
     prs = response[0]["hwi"].get("prs", None)
     altprs = response[0]["hwi"].get("altprs", None)
@@ -127,8 +144,8 @@ def export_book_vocab(cursor, book_title, amount=-1):
     key_to_book, title_to_id = book_dict(cursor)
     book_key = title_to_id[book_title]
 
-    cards = []          # successful lookups
-    failed_words = []   # words not in expected format
+    cards = []  # successful lookups
+    failed_words = []  # words not in expected format
     missing_words = []  # words not in the dictionary
 
     # Grab all words from the given book
@@ -159,26 +176,9 @@ def export_book_vocab(cursor, book_title, amount=-1):
 
     # Result
     print("\n####  EXPORT INFO  ####" +
-          "\n  Succesfully exported " + str(len(cards)) + " cards"
+          "\n  Succesfully exported " + str(len(cards)) + " cards" +
           "\n  Words not in expected format: " + str(failed_words) +
           "\n  Words not in the dictionary: " + str(missing_words))
-
-
-def main():
-    args = parse_args()
-
-    # Connect to vocabulary database file (vocab.db)
-    connection = sqlite3.connect(args.db_path)
-    cursor = connection.cursor()
-
-    if args.books:
-        print_books(cursor)
-    elif args.title is not None:
-        export_book_vocab(cursor, args.title)
-    else:
-        print("Please specify the title of a book using -t TITLE." +
-              "\nTo see which books are available for export " +
-              "run kanki with the argument -b (or --books)")
 
 
 if __name__ == "__main__":
