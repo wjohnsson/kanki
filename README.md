@@ -5,19 +5,17 @@ kanki is a command line utility for exporting and finding definitions of words l
 
 ## How to use
 ```
-usage: kanki.py [-h] [-b] [-t TITLE] db_path
-
-positional arguments:
-  db_path               the path to the vocabulary database
+usage: kanki.py [-h] [-l] [-t TITLE] [-p PATH]
 
 optional arguments:
   -h, --help            show this help message and exit
-  -b, --books           list books in vocabulary file
+  -l, --list            list books in vocabulary file
   -t TITLE, --title TITLE
                         the title of the book to export
+  -p PATH, --path PATH  the path to the vocabulary database (default: ./vocab.db)
 ```
 
-kanki uses python and [Requests](https://requests.readthedocs.io/en/master/) so first make sure you have those installed eg. by running `pip install requests`.
+kanki uses python3 and [Requests](https://requests.readthedocs.io/en/master/) so first make sure you have those installed eg. by running `pip install requests`.
 
 - Clone the repository
 ```
@@ -28,7 +26,7 @@ git clone https://github.com/wjohnsson/kanki.git
 
 - Plug in your Kindle and search for `vocab.db` (mine was in a hidden folder called `system/vocabulary/`).
 
-- run the script, eg. `python kanki.py --title "1984" ./vocab.db`
+- run the script, eg. `python kanki.py --title "1984" --path vocab.db`
 
 - kanki will export to a file called `kanki.txt` which you can then import (`file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to), separate fields by comma and allow HTML in fields.
 

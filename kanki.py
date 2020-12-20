@@ -2,13 +2,18 @@ import argparse
 import sqlite3
 import requests
 from collections import defaultdict
+import os.path
 
 
 def main():
     args = parse_args()
 
-    # Connect to vocabulary database file (vocab.db)
-    connection = sqlite3.connect(args.db_path)
+    # Connect sqlite3 to vocabulary database file (default: vocab.db)
+    db_path = "vocab.db"
+    if args.path:
+        db_path = args.path
+        assert os.path.isfile(db_path), f"{db_path} not found"
+    connection = sqlite3.connect(db_path)
     cursor = connection.cursor()
 
     if args.list:
@@ -29,8 +34,8 @@ def parse_args():
                             action="store_true")
     arg_parser.add_argument("-t", "--title",
                             help="the title of the book to export")
-    arg_parser.add_argument("db_path",
-                            help="the path to the vocabulary database")
+    arg_parser.add_argument("-p", "--path",
+                            help="the path to the vocabulary database (default: ./vocab.db)")
     return arg_parser.parse_args()
 
 
