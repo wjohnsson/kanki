@@ -24,7 +24,7 @@ kanki is known to work with Kindle Paperwhite 3. It uses python3 and the [Reques
 
 3. Plug in your Kindle and search for `vocab.db` (mine was in a hidden folder called `system/vocabulary/`).
 
-4. run the script, eg. `python kanki.py --title "1984" --path vocab.db --key <api-key>`
+4. Run the script, eg. `python kanki.py --title "1984" --path vocab.db --key <api-key>`
 
 5. kanki will export to a file called `kanki_export.txt` which you can then import to Anki (using `file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to), select "Fields separated by: Comma" and "Allow HTML in fields".
 

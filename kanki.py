@@ -39,7 +39,7 @@ def main():
             return
 
     if args.title:
-        export_book_vocab(cursor, args.title, api_key, amount=10)
+        export_book_vocab(cursor, args.title, api_key)
 
 
 def parse_args():
@@ -143,7 +143,6 @@ def lookup_word(word, api_key):
         raise
 
 
-
 def book_dicts(cursor):
     """Return two dictionaries, one from book key to book title and author
     as well as one from book title to book keys."""
@@ -166,13 +165,12 @@ def book_dicts(cursor):
 
 def write_to_export_file(cards):
     """Write all cards to a file in an Anki readable format."""
+    with open("kanki_export.txt", "w", encoding="utf-8") as output:
+        for card in cards:
+            # A word may have multiple definitions, join them with a semicolon.
+            definitions = "; ".join(card.defs)
 
-    for card in cards:
-        # A word may have multiple definitions, join them with a semicolon.
-        definitions = "; ".join(card.defs)
-
-        # Anki accepts plaintext files with fields separated by commas
-        with open("kanki_export.txt", "w", encoding="utf-8") as output:
+            # Anki accepts plaintext files with fields separated by commas
             # Surround all fields in quotes and write in same order as in Anki.
             # Also make sure all double quotes are single quotes in the file
             # so that it is readable by Anki
@@ -228,10 +226,11 @@ def export_book_vocab(cursor, book_titles, api_key, amount=-1):
     write_to_export_file(cards)
 
     # Result
-    print("\n####  EXPORT INFO  ####" +
-          "\n  Successfully exported " + str(len(cards)) + " cards" +
-          "\n  Words not in expected format: " + str(failed_words) +
-          "\n  Words not in the online dictionary: " + str(missing_words))
+    print(f"\n####  EXPORT INFO  ####"
+          f"\n  Books exported {book_titles}"
+          f"\n  Successfully exported {len(cards)} cards"
+          f"\n  Words not in expected format: {failed_words}"
+          f"\n  Words not in the online dictionary: {missing_words}")
 
 
 if __name__ == "__main__":
