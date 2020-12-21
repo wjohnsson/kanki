@@ -3,6 +3,7 @@ import sqlite3
 import requests
 from collections import defaultdict
 import os.path
+import sys
 
 
 def main():
@@ -12,18 +13,33 @@ def main():
     db_path = "vocab.db"
     if args.path:
         db_path = args.path
-        assert os.path.isfile(db_path), f"{db_path} not found"
+        assert os.path.isfile(db_path), f"{db_path} not found."
     connection = sqlite3.connect(db_path)
     cursor = connection.cursor()
 
     if args.list:
         print_books(cursor)
-    elif args.title is not None:
-        export_book_vocab(cursor, args.title, 10)
+        return
+
+    api_key = args.key
+    if args.key:
+        file_name = "api_key.txt"
+        with open(file_name, "w") as f:
+            f.write(args.key)
+            print(f"API key written to {file_name}.\n"
+                  f"Next time you run kanki, this key will be used (unless you provide a new one).\n")
     else:
-        print("Please specify the title of a book using -t TITLE." +
-              "\nTo see which books are available for export " +
-              "run kanki with the argument -l (or --list)")
+        # If no key is given, try to use one that might be saved.
+        try:
+            with open("api_key.txt", "r") as f:
+                api_key = f.read()
+        except FileNotFoundError:
+            print("You need to add an API key to Merriam Websters Learners Dictionary using the --key KEY argument.\n"
+                  "See https://www.dictionaryapi.com/.")
+            return
+
+    if args.title:
+        export_book_vocab(cursor, args.title, api_key, amount=10)
 
 
 def parse_args():
@@ -36,6 +52,13 @@ def parse_args():
                             help="the title of the book to export")
     arg_parser.add_argument("-p", "--path",
                             help="the path to the vocabulary database (default: ./vocab.db)")
+    arg_parser.add_argument("-k", "--key",
+                            help="your Merriam Websters Learner's Dictionary API key")
+
+    if len(sys.argv) == 1:
+        print("Please specify the title of a book using -t TITLE.\n")
+        arg_parser.print_help()
+
     return arg_parser.parse_args()
 
 
@@ -54,7 +77,7 @@ class Card:
     def __init__(self, word=None, ipa=None, shortdef=None, sentence=None, book_title=None, author=None):
         self.word = word
         self.ipa = ipa  # pronunciation
-        self.shortdef = shortdef
+        self.defs = shortdef
         self.sentence = sentence
         self.book_title = book_title
         self.author = author
@@ -80,10 +103,9 @@ def get_pronunciation(response):
     return ipa
 
 
-def lookup_word(word):
+def lookup_word(word, api_key):
     """ Looks up a word in the dictionary, returning a card with the word itself,
     as well as its definition and pronunciation."""
-    api_key = "your_api_key_here"
     api_request = "https://www.dictionaryapi.com/api/v3/references/learners/json/" + word + "?key=" + api_key
 
     print("Looking up word: " + word + "... ")
@@ -91,6 +113,11 @@ def lookup_word(word):
 
     if response.status_code != 200:
         print("\nError when querying Merriam Webster's Dictionary API.")
+    elif "Invalid API key" in response.text:
+        print("Invalid API key. Make sure it is subscribed to Merriam Websters Learners Dictionary.\n"
+              "You can replace the current key by providing the argument --key KEY.\n"
+              "Exiting...")
+        sys.exit()
     else:
         print("OK")
 
@@ -100,7 +127,7 @@ def lookup_word(word):
     try:
         # Take the interesting parts of the response
         card.word = response["meta"]["stems"][0]
-        card.shortdef = response["shortdef"]
+        card.defs = response["shortdef"]
         card.ipa = get_pronunciation(response)
         return card
     except KeyError as err:
@@ -138,26 +165,26 @@ def book_dicts(cursor):
 
 def write_to_export_file(cards):
     """Write all cards to a file in an Anki readable format."""
-    # Anki accepts plaintext files with fields separated by commas
-    output = open("kanki.txt", "w", encoding="utf-8")
 
     for card in cards:
         # A word may have multiple definitions, join them with a semicolon.
-        definitions = "; ".join(card.shortdef)
+        definitions = "; ".join(card.defs)
 
-        # Surround all fields in quotes and write in same order as in Anki.
-        # Also make sure all double quotes are single quotes in the file
-        # so that it is readable by Anki
-        output.write('"{0}"'.format('", "'.join(
-            [card.word,
-             card.ipa,
-             card.sentence.replace('"', "'"),
-             definitions,
-             card.book_title.replace('"', "'"),
-             card.author])) + "\n")
+        # Anki accepts plaintext files with fields separated by commas
+        with open("kanki_export.txt", "w", encoding="utf-8") as output:
+            # Surround all fields in quotes and write in same order as in Anki.
+            # Also make sure all double quotes are single quotes in the file
+            # so that it is readable by Anki
+            output.write('"{0}"'.format('", "'.join(
+                [card.word,
+                 card.ipa,
+                 card.sentence.replace('"', "'"),
+                 definitions,
+                 card.book_title.replace('"', "'"),
+                 card.author])) + "\n")
 
 
-def export_book_vocab(cursor, book_title, amount=-1):
+def export_book_vocab(cursor, book_title, api_key, amount=-1):
     """Export all words from the given book."""
     key_to_book, title_to_keys = book_dicts(cursor)
     book_keys = title_to_keys[book_title]
@@ -182,7 +209,7 @@ def export_book_vocab(cursor, book_title, amount=-1):
         sentence = word[2]  # the sentence in which the word was looked up
 
         try:
-            card = lookup_word(word)
+            card = lookup_word(word, api_key)
             card.sentence = sentence.replace(word, "<b>" + word + "</b>")
             card.book_title = book_title
             card.author = key_to_book[book_keys[0]][1]
