@@ -5,15 +5,15 @@ kanki is a command line utility for exporting and finding definitions of words l
 
 ## How to use
 ```
-usage: kanki.py [-h] [-l] [-t TITLE] [-p PATH] [-k KEY]
+usage: kanki.py [-h] [-l] [-t TITLE [TITLE ...]] [-p PATH] [-k KEY]
 
 optional arguments:
   -h, --help            show this help message and exit
   -l, --list            list books in vocabulary file
-  -t TITLE, --title TITLE
-                        the title of the book to export
+  -t TITLE [TITLE ...], --title TITLE [TITLE ...]
+                        the title(s) of the book(s) to export
   -p PATH, --path PATH  the path to the vocabulary database (default: ./vocab.db)
-  -k KEY, --key KEY     your Merriam Websters Learner's Dictionary API key
+  -k KEY, --key KEY     your Merriam-Websters Learner's Dictionary API key
 ```
 
 kanki is known to work with Kindle Paperwhite 3. It uses python3 and the [Requests library](https://requests.readthedocs.io/en/master/) so first make sure you have that installed eg. by running `pip install requests`.

@@ -34,7 +34,7 @@ def main():
             with open("api_key.txt", "r") as f:
                 api_key = f.read()
         except FileNotFoundError:
-            print("You need to add an API key to Merriam Websters Learners Dictionary using the --key KEY argument.\n"
+            print("You need to add an API key to Merriam-Websters Learners Dictionary using the --key KEY argument.\n"
                   "See https://www.dictionaryapi.com/.")
             return
 
@@ -49,11 +49,13 @@ def parse_args():
                             help="list books in vocabulary file",
                             action="store_true")
     arg_parser.add_argument("-t", "--title",
-                            help="the title of the book to export")
+                            help="the title(s) of the book(s) to export",
+                            nargs="+",
+                            action="append")
     arg_parser.add_argument("-p", "--path",
                             help="the path to the vocabulary database (default: ./vocab.db)")
     arg_parser.add_argument("-k", "--key",
-                            help="your Merriam Websters Learner's Dictionary API key")
+                            help="your Merriam-Websters Learner's Dictionary API key")
 
     if len(sys.argv) == 1:
         print("Please specify the title of a book using -t TITLE.\n")
@@ -112,23 +114,21 @@ def lookup_word(word, api_key):
     response = requests.get(api_request)
 
     if response.status_code != 200:
-        print("\nError when querying Merriam Webster's Dictionary API.")
+        print("\nError when querying Merriam-Webster's Dictionary API.")
     elif "Invalid API key" in response.text:
         print("Invalid API key. Make sure it is subscribed to Merriam Websters Learners Dictionary.\n"
               "You can replace the current key by providing the argument --key KEY.\n"
               "Exiting...")
         sys.exit()
-    else:
-        print("OK")
 
     response = response.json()[0]
-
     card = Card()
     try:
         # Take the interesting parts of the response
         card.word = response["meta"]["stems"][0]
         card.defs = response["shortdef"]
         card.ipa = get_pronunciation(response)
+        print("OK")
         return card
     except KeyError as err:
         # Sometimes the response doesn't have the format we expected, will have
@@ -139,8 +139,9 @@ def lookup_word(word, api_key):
     except TypeError:
         # If the response isn't a dictionary, it means we get a list of
         # suggested words so looking up keys won't work
-        print(word + " not found in Merriam Webster's Learner's dictionary!")
+        print(word + " not found in Merriam-Webster's Learner's dictionary!")
         raise
+
 
 
 def book_dicts(cursor):
@@ -184,40 +185,45 @@ def write_to_export_file(cards):
                  card.author])) + "\n")
 
 
-def export_book_vocab(cursor, book_title, api_key, amount=-1):
-    """Export all words from the given book."""
+def export_book_vocab(cursor, book_titles, api_key, amount=-1):
+    """Export all words from the given book titles."""
     key_to_book, title_to_keys = book_dicts(cursor)
-    book_keys = title_to_keys[book_title]
 
     cards = []  # successful lookups
     failed_words = []  # words not in expected format
     missing_words = []  # words not in the dictionary
 
-    # Grab all words from the given book
-    condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
-    cursor.execute("SELECT word_key, book_key, usage FROM LOOKUPS" +
-                   " WHERE book_key = " + condition)
-    words = cursor.fetchall()
+    # Flatten list given by argparse
+    book_titles = [book for sublist in book_titles for book in sublist]
+    for book_title in book_titles:
+        print(f"\n--- Exporting book: {book_title}")
+        book_keys = title_to_keys[book_title]
 
-    # For testing: specify the amount of words you want to export
-    if amount >= -1:
-        words = words[:amount]
+        # Grab all words from the given book
+        condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
+        cursor.execute("SELECT word_key, book_key, usage FROM LOOKUPS" +
+                       " WHERE book_key = " + condition)
+        rows = cursor.fetchall()
 
-    for word in words:
-        assert word[0][:2] == "en", "Only english words are supported."
-        word = word[0][3:]  # remove 'en:' from word_key
-        sentence = word[2]  # the sentence in which the word was looked up
+        # For testing: specify the amount of words you want to export from each book
+        if amount >= -1:
+            rows = rows[:amount]
 
-        try:
-            card = lookup_word(word, api_key)
-            card.sentence = sentence.replace(word, "<b>" + word + "</b>")
-            card.book_title = book_title
-            card.author = key_to_book[book_keys[0]][1]
-            cards.append(card)
-        except KeyError:
-            failed_words.append(word)
-        except TypeError:
-            missing_words.append(word)
+        for row in rows:
+            assert row[0][:2] == "en", "Only english words are supported."
+            word = row[0][3:]  # remove 'en:' from word_key
+            sentence = row[2]  # the sentence in which the word was looked up
+
+            try:
+                card = lookup_word(word, api_key)
+                card.sentence = sentence.replace(word, "<b>" + word + "</b>")
+                card.book_title = book_title
+                card.author = key_to_book[book_keys[0]][1]
+                cards.append(card)
+            except KeyError:
+                failed_words.append(word)
+            except TypeError:
+                missing_words.append(word)
 
     write_to_export_file(cards)
 
