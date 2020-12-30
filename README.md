@@ -28,6 +28,8 @@ kanki is known to work with Kindle Paperwhite 3. It uses python3 and the [Reques
 
 5. kanki will export to a file called `kanki_export.txt` which you can then import to Anki (using `file > import...`) to a deck of your choosing. Make sure you have the card type kanki (or whatever you've renamed it to), select "Fields separated by: Comma" and "Allow HTML in fields".
 
+6. Unfortunately some of the words looked up may be missing from the dictionary. These will be written to `kanki_failed_words.txt` which you can then manually fix and add later.
+
 ![Preview of what an import should look like](img/import.PNG)
 
 ### Import kanki card type into Anki

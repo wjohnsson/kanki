@@ -107,7 +107,7 @@ def get_pronunciation(response):
 
 
 def lookup_word(word, api_key):
-    """ Looks up a word in the dictionary, returning a card with the word itself,
+    """Looks up a word in the dictionary, returning a card with the word itself,
     as well as its definition and pronunciation."""
     api_request = "https://www.dictionaryapi.com/api/v3/references/learners/json/" + word + "?key=" + api_key
 
@@ -123,14 +123,13 @@ def lookup_word(word, api_key):
         sys.exit()
 
     response = response.json()[0]
-    card = Card()
     try:
         # Take the interesting parts of the response
-        card.word = response["meta"]["stems"][0]
-        card.definitions = response["shortdef"]
-        card.ipa = get_pronunciation(response)
+        word_stem = response["meta"]["stems"][0]
+        definitions = response["shortdef"]
+        ipa = get_pronunciation(response)
         print("OK")
-        return card
+        return word_stem, definitions, ipa
     except KeyError as err:
         # Sometimes the response doesn't have the format we expected, will have
         # to handle these edge cases as they become known
@@ -164,10 +163,10 @@ def book_dicts(cursor):
     return key_to_book, title_to_keys
 
 
-def write_to_export_file(cards, book_titles):
+def write_to_export_file(cards, book_titles, file_name="kanki_export.txt"):
     """Write all cards to a file in an Anki readable format."""
     today = datetime.today().strftime("%Y-%m-%d %H:%M")
-    with open("kanki_export.txt", "w") as output:
+    with open(file_name, "w") as output:
         # Nice to have some metadata in the export file
         listed_books = "".join(["\n#  -" + title for title in book_titles])
         comment = (f"# Card data generated on {today} by kanki from book(s):"
@@ -178,8 +177,10 @@ def write_to_export_file(cards, book_titles):
         output.write(comment)
 
         for card in cards:
-            # A word may have multiple definitions, join them with a semicolon.
-            definitions = "; ".join(card.definitions)
+            definitions = card.definitions
+            if card.definitions is not None:
+                # A word may have multiple definitions, join them with a semicolon.
+                definitions = "; ".join(card.definitions)
 
             # Collect all card data in a list and make sure all double quotes are
             # single quotes in the file so that it is readable by Anki
@@ -189,10 +190,16 @@ def write_to_export_file(cards, book_titles):
                          definitions,
                          card.book_title.replace('"', "'"),
                          card.author]
+            card_data = replace_nones(card_data)
 
             # Anki accepts plaintext files with fields separated by commas.
             # Surround all fields in quotes and write in same order as the kanki card type.
             output.write('"{0}"\n'.format('", "'.join(card_data)))
+
+
+def replace_nones(strings):
+    """Replaces all None to empty string."""
+    return list(map(lambda s: "" if s is None else s, strings))
 
 
 def export_book_vocab(cursor, book_titles, api_key, amount=-1):
@@ -224,24 +231,34 @@ def export_book_vocab(cursor, book_titles, api_key, amount=-1):
             word = row[0][3:]  # remove 'en:' from word_key
             sentence = row[2]  # the sentence in which the word was looked up
 
+            card = Card()
+            card.word = word
+            card.sentence = sentence.replace(word, "<b>" + word + "</b>")
+            card.book_title = book_title
+            card.author = key_to_book[book_keys[0]][1]
             try:
-                card = lookup_word(word, api_key)
-                card.sentence = sentence.replace(word, "<b>" + word + "</b>")
-                card.book_title = book_title
-                card.author = key_to_book[book_keys[0]][1]
+                word_stem, definitions, ipa = lookup_word(word, api_key)
+
+                # Might give two inflections of a word - could be useful for learning
+                card.word = word_stem
+                card.definitions = definitions
+                card.ipa = ipa
                 cards.append(card)
             except KeyError:
-                failed_words.append(word)
+                failed_words.append(card)
             except TypeError:
-                missing_words.append(word)
+                missing_words.append(card)
 
-    write_to_export_file(cards, book_titles)
+    success_file_path = "kanki_export.txt"
+    failed_file_path = "kanki_failed_words.txt"
+    write_to_export_file(cards, book_titles, success_file_path)
+    write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
 
     print(f"\n####  EXPORT INFO  ####"
-          f"\n  Books exported: {book_titles}"
-          f"\n  Successfully exported {len(cards)} cards"
-          f"\n  Words not in expected format: {failed_words}"
-          f"\n  Words not in the online dictionary: {missing_words}")
+          f"\nBooks exported: {book_titles}"
+          f"\nSuccessfully exported {len(cards)} cards to '{success_file_path}.'"
+          f"\n{len(failed_words)} words not in expected format, written to {failed_file_path}."
+          f"\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.")
 
 
 if __name__ == "__main__":
