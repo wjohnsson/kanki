@@ -20,7 +20,7 @@ kanki is known to work with Kindle Paperwhite 3. It uses python3 and the [Reques
 
 1. Clone the repository: `git clone https://github.com/wjohnsson/kanki.git`
 
-2. If it's the first time you use kanki you must first [import the kanki card type](#import-kanki-card-type) into Anki. Also you have to create an account on [Merriam Webster's Developer Center](https://www.dictionaryapi.com/) to generate an API key to the Learner's Dictionary.
+2. If it's the first time you use kanki you must first [import the kanki card type](#import-kanki-card-type-into-anki) into Anki. Also you have to create an account on [Merriam Webster's Developer Center](https://www.dictionaryapi.com/) to generate an API key to the Learner's Dictionary.
 
 3. Plug in your Kindle and search for `vocab.db` (mine was in a hidden folder called `system/vocabulary/`).
 
