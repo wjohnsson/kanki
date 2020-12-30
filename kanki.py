@@ -4,6 +4,7 @@ import requests
 from collections import defaultdict
 import os.path
 import sys
+from datetime import datetime
 
 
 def main():
@@ -76,10 +77,10 @@ def print_books(cursor):
 
 
 class Card:
-    def __init__(self, word=None, ipa=None, shortdef=None, sentence=None, book_title=None, author=None):
+    def __init__(self, word=None, ipa=None, definitions=None, sentence=None, book_title=None, author=None):
         self.word = word
         self.ipa = ipa  # pronunciation
-        self.defs = shortdef
+        self.definitions = definitions  # definitions
         self.sentence = sentence
         self.book_title = book_title
         self.author = author
@@ -126,7 +127,7 @@ def lookup_word(word, api_key):
     try:
         # Take the interesting parts of the response
         card.word = response["meta"]["stems"][0]
-        card.defs = response["shortdef"]
+        card.definitions = response["shortdef"]
         card.ipa = get_pronunciation(response)
         print("OK")
         return card
@@ -163,24 +164,35 @@ def book_dicts(cursor):
     return key_to_book, title_to_keys
 
 
-def write_to_export_file(cards):
+def write_to_export_file(cards, book_titles):
     """Write all cards to a file in an Anki readable format."""
-    with open("kanki_export.txt", "w", encoding="utf-8") as output:
+    today = datetime.today().strftime("%Y-%m-%d %H:%M")
+    with open("kanki_export.txt", "w") as output:
+        # Nice to have some metadata in the export file
+        listed_books = "".join(["\n#  -" + title for title in book_titles])
+        comment = (f"# Card data generated on {today} by kanki from book(s):"
+                   f"{listed_books}"
+                   "\n#"
+                   "\n# Format is:"
+                   "\n# 'word', 'pronunciation', 'sentence', 'definition', 'author'\n\n")
+        output.write(comment)
+
         for card in cards:
             # A word may have multiple definitions, join them with a semicolon.
-            definitions = "; ".join(card.defs)
+            definitions = "; ".join(card.definitions)
 
-            # Anki accepts plaintext files with fields separated by commas
-            # Surround all fields in quotes and write in same order as in Anki.
-            # Also make sure all double quotes are single quotes in the file
-            # so that it is readable by Anki
-            output.write('"{0}"'.format('", "'.join(
-                [card.word,
-                 card.ipa,
-                 card.sentence.replace('"', "'"),
-                 definitions,
-                 card.book_title.replace('"', "'"),
-                 card.author])) + "\n")
+            # Collect all card data in a list and make sure all double quotes are
+            # single quotes in the file so that it is readable by Anki
+            card_data = [card.word,
+                         card.ipa,
+                         card.sentence.replace('"', "'"),
+                         definitions,
+                         card.book_title.replace('"', "'"),
+                         card.author]
+
+            # Anki accepts plaintext files with fields separated by commas.
+            # Surround all fields in quotes and write in same order as the kanki card type.
+            output.write('"{0}"\n'.format('", "'.join(card_data)))
 
 
 def export_book_vocab(cursor, book_titles, api_key, amount=-1):
@@ -223,11 +235,10 @@ def export_book_vocab(cursor, book_titles, api_key, amount=-1):
             except TypeError:
                 missing_words.append(word)
 
-    write_to_export_file(cards)
+    write_to_export_file(cards, book_titles)
 
-    # Result
     print(f"\n####  EXPORT INFO  ####"
-          f"\n  Books exported {book_titles}"
+          f"\n  Books exported: {book_titles}"
           f"\n  Successfully exported {len(cards)} cards"
           f"\n  Words not in expected format: {failed_words}"
           f"\n  Words not in the online dictionary: {missing_words}")
