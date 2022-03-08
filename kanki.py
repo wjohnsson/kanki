@@ -8,20 +8,10 @@ from datetime import datetime
 
 
 def main():
+    # Use argparse for command line arguments
     args = parse_args()
 
-    # Connect sqlite3 to vocabulary database file (default: vocab.db)
-    db_path = "vocab.db"
-    if args.path:
-        db_path = args.path
-        assert os.path.isfile(db_path), f"{db_path} not found."
-    connection = sqlite3.connect(db_path)
-    cursor = connection.cursor()
-
-    if args.list:
-        print_books(cursor)
-        return
-
+    # API key management
     api_key = args.key
     if args.key:
         file_name = "api_key.txt"
@@ -39,7 +29,30 @@ def main():
                   "See https://www.dictionaryapi.com/.")
             return
 
-    if args.title:
+    # Connect sqlite3 to vocabulary database file (default path: './vocab.db')
+    cursor = None
+    if args.list or args.title:
+        if args.path:
+            db_path = args.path
+        else:
+            db_path = "vocab.db"
+
+        # Make sure the file exists
+        if not os.path.isfile(db_path):
+            print(f"ERROR: Vocabulary database file {db_path} not found (specify using --path).\n"
+                  f"See documentation on Github for how to export it from the Kindle.")
+            return
+        connection = sqlite3.connect(db_path)
+        cursor = connection.cursor()
+
+        if args.list:
+            print_books(cursor)
+            return
+
+    if args.word:
+        # For debugging we can look up single words instead of going through a whole book.
+        lookup_word(args.word, api_key)
+    elif args.title:
         export_book_vocab(cursor, args.title, api_key)
 
 
@@ -47,20 +60,18 @@ def parse_args():
     """Add arguments and parse user input"""
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-l", "--list",
-                            help="list books in vocabulary file",
+                            help="List books in vocabulary file.",
                             action="store_true")
     arg_parser.add_argument("-t", "--title",
-                            help="the title(s) of the book(s) to export",
+                            help="The title(s) of the book(s) to export.",
                             nargs="+",
                             action="append")
     arg_parser.add_argument("-p", "--path",
-                            help="the path to the vocabulary database (default: ./vocab.db)")
+                            help="The path to the vocabulary database (default: ./vocab.db).")
     arg_parser.add_argument("-k", "--key",
-                            help="your Merriam-Websters Learner's Dictionary API key")
-
-    if len(sys.argv) == 1:
-        print("Please specify the title of a book using -t TITLE.\n")
-        arg_parser.print_help()
+                            help="Your Merriam-Websters Learner's Dictionary API key.")
+    arg_parser.add_argument("-w", "--word",
+                            help="A word to look up in the dictionary.")
 
     return arg_parser.parse_args()
 
@@ -168,12 +179,12 @@ def write_to_export_file(cards, book_titles, file_name="kanki_export.txt"):
     today = datetime.today().strftime("%Y-%m-%d %H:%M")
     with open(file_name, "w") as output:
         # Nice to have some metadata in the export file
-        listed_books = "".join(["\n#  -" + title for title in book_titles])
+        listed_books = "".join(["\n#  - " + title for title in book_titles])
         comment = (f"# Card data generated on {today} by kanki from book(s):"
                    f"{listed_books}"
                    "\n#"
-                   "\n# Format is:"
-                   "\n# 'word', 'pronunciation', 'sentence', 'definition', 'author'\n\n")
+                   "\n# Format:"
+                   "\n# word,pronunciation,sentence,definition,author\n\n")
         output.write(comment)
 
         for card in cards:
