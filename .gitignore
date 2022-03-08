@@ -1,5 +1,10 @@
-*.db
+# Kindle database files
+**/*.db*
+
+# IDE stuff
 __pycache__/*
 .idea/*
-*.txt
 .vscode/*
+
+# Export files
+*.txt
