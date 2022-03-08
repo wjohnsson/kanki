@@ -205,7 +205,10 @@ def write_to_export_file(cards, book_titles, file_name="kanki_export.txt"):
 
             # Anki accepts plaintext files with fields separated by commas.
             # Surround all fields in quotes and write in same order as the kanki card type.
-            output.write('"{0}"\n'.format('", "'.join(card_data)))
+            card_data_str = '"{0}"\n'.format('", "'.join(card_data))
+
+            # Had some issues with text encoding, hence the strange need for encoding/decoding
+            output.write(card_data_str.encode('utf-8').decode())
 
 
 def replace_nones(strings):
