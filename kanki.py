@@ -8,7 +8,7 @@ import os.path
 import sys
 from datetime import datetime
 
-from typing import List
+from typing import List, Tuple, Iterable
 
 
 def main():
@@ -173,7 +173,7 @@ def lookup_word(word, api_key):
         raise
 
 
-def book_dicts(cursor):
+def get_book_dicts(cursor):
     """Return two dictionaries, one from book key to book title and author
     as well as one from book title to book keys."""
     cursor.execute('SELECT id, title, authors FROM BOOK_INFO')
@@ -191,6 +191,13 @@ def book_dicts(cursor):
         title_to_keys[title].append(book_key)
 
     return key_to_book, title_to_keys
+
+
+def get_book_keys(cursor, book_title: str) -> List[str]:
+    """Return the keys used to identify a book in the Kindle vocabulary database."""
+    cursor.execute(f'SELECT id FROM BOOK_INFO WHERE title = "{book_title}"')
+    book_keys = cursor.fetchall()
+    return flatten(book_keys)
 
 
 def write_to_export_file(cards, book_titles, file_name='kanki_export.txt'):
@@ -235,40 +242,27 @@ def replace_nones(strings: List[str]):
     return list(map(lambda s: '' if s is None else s, strings))
 
 
-def export_book_vocab(cursor, book_titles, api_key, amount=-1):
+def export_book_vocab(cursor, book_titles, api_key):
     """Export all words from the given book titles."""
-    key_to_book, title_to_keys = book_dicts(cursor)
 
-    cards = []  # successful lookups
+    cards = []  # words successfully found in dictionary
     failed_words = []  # words not in expected format
     missing_words = []  # words not in the dictionary
 
-    # Flatten list given by argparse
-    book_titles = [book for sublist in book_titles for book in sublist]
+    book_titles = flatten(book_titles)
     for book_title in book_titles:
         print(f'\n--- Exporting book: {book_title}')
-        book_keys = title_to_keys[book_title]
 
-        # Grab all words from the given book
-        condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
-        cursor.execute('SELECT word_key, book_key, usage FROM LOOKUPS' +
-                       ' WHERE book_key = ' + condition)
-        rows = cursor.fetchall()
-
-        # For testing: specify the amount of words you want to export from each book
-        if amount >= -1:
-            rows = rows[:amount]
-
-        for row in rows:
-            assert row[0][:2] == 'en', 'Only english words are supported.'
-            word = row[0][3:]  # remove 'en:' from word_key
-            sentence = row[2]  # the sentence in which the word was looked up
+        lookups = get_lookups(cursor, book_title)
+        for lookup in lookups:
+            word = get_word(lookup)
+            sentence = lookup[2]  # the sentence in which the word was looked up
 
             card = Card()
             card.word = word
             card.sentence = sentence.replace(word, '<b>' + word + '</b>')
             card.book_title = book_title
-            card.author = key_to_book[book_keys[0]][1]
+            card.author = get_author(cursor, book_title)
             try:
                 word_stem, definitions, ipa = lookup_word(word, api_key)
 
@@ -292,6 +286,34 @@ def export_book_vocab(cursor, book_titles, api_key, amount=-1):
           f'\nSuccessfully exported {len(cards)} cards to \'{success_file_path}.\''
           f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
           f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
+
+
+def get_word(lookup: Tuple) -> str:
+    """Return the word from a Kindle lookup"""
+    word_index = 0
+    assert lookup[word_index][:2] == 'en', 'Only english words are supported.'
+    word = lookup[word_index][3:]  # remove 'en:' from word_key
+    return word
+
+
+def get_lookups(cursor, book_title):
+    """Return all Kindle lookups in the given book."""
+    book_keys = get_book_keys(cursor, book_title)
+    condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
+    cursor.execute(f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key = {condition}')
+    rows = cursor.fetchall()
+    return rows
+
+
+def get_author(cursor: sqlite3.Cursor, book_title: str) -> str:
+    """Return the author of a book in the Kindle database given the book's title."""
+    cursor.execute(f'SELECT authors FROM BOOK_INFO WHERE title = "{book_title}"')
+    book_author = cursor.fetchone()
+    return book_author
+
+
+def flatten(items: List[Iterable]) -> List:
+    return [item for sublist in items for item in sublist]
 
 
 if __name__ == '__main__':
