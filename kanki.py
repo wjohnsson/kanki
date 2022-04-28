@@ -108,13 +108,13 @@ def print_books(cursor):
 
 
 class Card:
-    def __init__(self, word=None, ipa=None, definitions=None, sentence=None, book_title=None, author=None):
+    def __init__(self, word, sentence, book_title, author, ipa=None, definitions=None):
         self.word = word
-        self.ipa = ipa  # pronunciation
-        self.definitions = definitions  # definitions
-        self.sentence = sentence
+        self.sentence = surround_substring_with_html(sentence, word, 'b')
         self.book_title = book_title
         self.author = author
+        self.ipa = ipa  # pronunciation
+        self.definitions = definitions  # definitions
 
 
 def get_pronunciation(response):
@@ -257,12 +257,9 @@ def export_book_vocab(cursor, book_titles, api_key):
         for lookup in lookups:
             word = get_word(lookup)
             sentence = lookup[2]  # the sentence in which the word was looked up
+            author = get_author(cursor, book_title)
+            card = Card(word, sentence, book_title, author)
 
-            card = Card()
-            card.word = word
-            card.sentence = sentence.replace(word, '<b>' + word + '</b>')
-            card.book_title = book_title
-            card.author = get_author(cursor, book_title)
             try:
                 word_stem, definitions, ipa = lookup_word(word, api_key)
 
@@ -286,6 +283,12 @@ def export_book_vocab(cursor, book_titles, api_key):
           f'\nSuccessfully exported {len(cards)} cards to \'{success_file_path}.\''
           f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
           f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
+
+
+def surround_substring_with_html(string: str, substring: str, html: str):
+    open_tag = f'<{html}>'
+    close_tag = f'</{html}>'
+    return string.replace(substring, open_tag + substring + close_tag)
 
 
 def get_word(lookup: Tuple) -> str:
