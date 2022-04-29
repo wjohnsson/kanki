@@ -58,7 +58,7 @@ def get_arg_parser():
     arg_parser.add_argument('-k', '--key', type=str,
                             help='your Merriam-Websters Learner\'s Dictionary API key')
     arg_parser.add_argument('-w', '--word',
-                            help='A word to look up in the dictionary.')
+                            help='a single word to look up in the dictionary.')
     return arg_parser
 
 
