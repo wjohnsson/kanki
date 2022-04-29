@@ -45,12 +45,10 @@ poetry run python kanki --title "Dune" "Hello World" --key "your_api_key" --db_p
 
 4. If it's the first time you use kanki you must first [import the kanki card type](#import-kanki-card-type-into-anki) into Anki. 
 
-5. kanki will export to a file called `kanki_export.txt` which you can then import to Anki (using `File > Import...`) to
+5. kanki will export to a file called `kanki_export.txt` which you can then [import to Anki](#anki-import-reference) (using `File > Import...`) to
    a deck of your choosing. Use the card type kanki, select _"Fields separated by: Comma"_ and _"Allow HTML in fields"_.
 
 Unfortunately, some words looked up may be missing from the dictionary. These will be written to `kanki_failed_words.txt` which you can manually add later.
-
-![Preview of what an import should look like](img/import.PNG)
 
 ### Import kanki card type into Anki
 The first time you use kanki you must import the card type, so you get the correct fields and formatting.
@@ -58,5 +56,8 @@ In the Anki deck view press `Import File` and select `kanki.apkg` provided in th
 This will create a new deck containing one sample card with the kanki card type. 
 
 You can edit the formatting and the name of this card type as you wish, as long as the order of the fields remain the same.
+
+### Anki import reference
+![Preview of what an import should look like](img/import_reference.png)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
