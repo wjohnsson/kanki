@@ -16,6 +16,7 @@ def main():
     no_args_given = len(sys.argv) == 1
     if no_args_given:
         arg_parser.print_help()
+        sys.exit()
 
     # API key management
     api_key_path = '../api_key.txt'
