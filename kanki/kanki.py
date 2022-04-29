@@ -19,7 +19,7 @@ def main():
         sys.exit()
 
     # API key management
-    api_key_path = '../api_key.txt'
+    api_key_path = 'api_key.txt'
     api_key = args.key
     if api_key:
         save_api_key_to_file(api_key, api_key_path)
@@ -109,8 +109,8 @@ def export_book_vocab(cursor: sqlite3.Cursor, api_key: str, book_titles: List[st
     """Export all words from the given book titles."""
     cards, failed_words, missing_words = create_flashcards(cursor, api_key, book_titles)
 
-    successful_words_path = '../kanki_export.txt'
-    failed_file_path = '../kanki_failed_words.txt'
+    successful_words_path = 'kanki_export.txt'
+    failed_file_path = 'kanki_failed_words.txt'
 
     write_to_export_file(cards, book_titles, successful_words_path)
     write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
