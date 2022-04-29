@@ -23,12 +23,13 @@ def main():
     api_key = args.key
     if api_key:
         save_api_key_to_file(api_key, api_key_path)
-    else:
+
+    dictionary_required = args.title
+    if dictionary_required:
         api_key = read_api_key_from_file(api_key_path)
 
-    # Connect sqlite3 module to vocabulary file
-    require_sql = args.list or args.title
-    if require_sql:
+    sql_required = args.list or args.title
+    if sql_required:
         cursor = get_sql_cursor(args.db_path)
 
         if args.list:
