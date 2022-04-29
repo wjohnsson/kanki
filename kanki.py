@@ -1,14 +1,12 @@
 import argparse
+import os.path
 import sqlite3
-import typing
+import sys
+from collections import defaultdict
+from datetime import datetime
+from typing import List, Tuple, Iterable, Union
 
 import requests
-from collections import defaultdict
-import os.path
-import sys
-from datetime import datetime
-
-from typing import List, Tuple, Iterable, Union
 
 
 def main():
@@ -43,6 +41,25 @@ def main():
         lookup_word(args.word, api_key)
 
 
+def get_arg_parser():
+    """Add arguments and parse user input"""
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('-l', '--list',
+                            help='list books in vocabulary file',
+                            action='store_true')
+    arg_parser.add_argument('-t', '--title',
+                            help='the title(s) of the book(s) to export',
+                            nargs='+',
+                            action='append')
+    arg_parser.add_argument('-p', '--db_path', type=str, default='vocab.db',
+                            help='the path to the vocabulary database (default: ./vocab.db)')
+    arg_parser.add_argument('-k', '--key', type=str,
+                            help='your Merriam-Websters Learner\'s Dictionary API key')
+    arg_parser.add_argument('-w', '--word',
+                            help='A word to look up in the dictionary.')
+    return arg_parser
+
+
 def get_sql_cursor(db_path: str) -> sqlite3.Cursor:
     """Return the sqlite cursor connected to the Kindle vocabulary database."""
     if not os.path.isfile(db_path):
@@ -75,26 +92,6 @@ def save_api_key_to_file(key: str, path: Union[str, bytes, os.PathLike]):
               f'Next time you run kanki, this key will be used (unless you provide a new one).\n')
 
 
-def get_arg_parser():
-    """Add arguments and parse user input"""
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('-l', '--list',
-                            help='list books in vocabulary file',
-                            action='store_true')
-    arg_parser.add_argument('-t', '--title',
-                            help='the title(s) of the book(s) to export',
-                            nargs='+',
-                            action='append')
-    arg_parser.add_argument('-p', '--db_path', type=str, default='vocab.db',
-                            help='the path to the vocabulary database (default: ./vocab.db)')
-    arg_parser.add_argument('-k', '--key', type=str,
-                            help='your Merriam-Websters Learner\'s Dictionary API key')
-    arg_parser.add_argument('-w', '--word',
-                            help='A word to look up in the dictionary.')
-
-    return arg_parser
-
-
 def print_books(cursor):
     """Print all books in database"""
     cursor.execute("SELECT title FROM BOOK_INFO")
@@ -106,34 +103,45 @@ def print_books(cursor):
         print('  ' + b)
 
 
-class Card:
-    def __init__(self, word, sentence, book_title, author, ipa=None, definitions=None):
-        self.word = word
-        self.sentence = surround_substring_with_html(sentence, word, 'b')
-        self.book_title = book_title
-        self.author = author
-        self.ipa = ipa  # pronunciation
-        self.definitions = definitions  # definitions
+def export_book_vocab(cursor: sqlite3.Cursor, api_key: str, book_titles: List[str]):
+    """Export all words from the given book titles."""
+    cards, failed_words, missing_words = create_flashcards(cursor, api_key, book_titles)
+
+    successful_words_path = 'kanki_export.txt'
+    failed_file_path = 'kanki_failed_words.txt'
+
+    write_to_export_file(cards, book_titles, successful_words_path)
+    write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
+
+    print(f'\n####  EXPORT INFO  ####'
+          f'\nBooks exported: {book_titles}'
+          f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
+          f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
+          f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
 
 
-def get_pronunciation(response):
-    """Return pronunciation from response."""
-    # Where to find the pronunciation differs from word to word
-    prs = response['hwi'].get('prs', None)
-    altprs = response['hwi'].get('altprs', None)
+def create_flashcards(cursor: sqlite3.Cursor, api_key: str, book_titles: List[str]):
+    cards = []  # words successfully found in dictionary
+    failed_words = []  # words where the response from the dictionary was not what we expected
+    missing_words = []  # words not in the dictionary
+    for book_title in book_titles:
+        print(f'\n--- Exporting book: {book_title}')
 
-    ipa = None
-    if prs is not None:
-        # Prefer to use prs
-        ipa = prs[0]['ipa']
-    elif altprs is not None:
-        ipa = altprs[0]['ipa']
+        lookups = get_lookups(cursor, book_title)
+        for lookup in lookups:
+            word = get_word(lookup)
+            sentence = lookup[2]  # the sentence in which the word was looked up
+            author = get_author(cursor, book_title)
 
-    if altprs is None and prs is None:
-        # Couldn't find it in "hwi", it sometimes is in "vrs"
-        ipa = response['vrs'][0]['prs'][0]['ipa']
-
-    return ipa
+            card = Card(word, sentence, book_title, author)
+            try:
+                card = set_word_meta_data(api_key, card, word)
+                cards.append(card)
+            except KeyError:
+                failed_words.append(card)
+            except TypeError:
+                missing_words.append(card)
+    return cards, failed_words, missing_words
 
 
 def lookup_word(word, api_key):
@@ -169,6 +177,36 @@ def lookup_word(word, api_key):
         # If the response isn't a dictionary, it means we get a list of suggested words so looking up keys won't work.
         print(word + ' not found in Merriam-Webster\'s Learner\'s dictionary!')
         raise
+
+
+class Card:
+    def __init__(self, word, sentence, book_title, author, ipa=None, definitions=None):
+        self.word = word
+        self.sentence = surround_substring_with_html(sentence, word, 'b')
+        self.book_title = book_title
+        self.author = author
+        self.ipa = ipa  # pronunciation
+        self.definitions = definitions  # definitions
+
+
+def get_pronunciation(response):
+    """Return pronunciation from response."""
+    # Where to find the pronunciation differs from word to word
+    prs = response['hwi'].get('prs', None)
+    altprs = response['hwi'].get('altprs', None)
+
+    ipa = None
+    if prs is not None:
+        # Prefer to use prs
+        ipa = prs[0]['ipa']
+    elif altprs is not None:
+        ipa = altprs[0]['ipa']
+
+    if altprs is None and prs is None:
+        # Couldn't find it in "hwi", it sometimes is in "vrs"
+        ipa = response['vrs'][0]['prs'][0]['ipa']
+
+    return ipa
 
 
 def get_book_dicts(cursor):
@@ -238,47 +276,6 @@ def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[
 def replace_nones(strings: List[str]):
     """Replaces all None to empty string."""
     return list(map(lambda s: '' if s is None else s, strings))
-
-
-def export_book_vocab(cursor: sqlite3.Cursor, api_key: str, book_titles: List[str]):
-    """Export all words from the given book titles."""
-    cards, failed_words, missing_words = create_flashcards(cursor, api_key, book_titles)
-
-    successful_words_path = 'kanki_export.txt'
-    failed_file_path = 'kanki_failed_words.txt'
-
-    write_to_export_file(cards, book_titles, successful_words_path)
-    write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
-
-    print(f'\n####  EXPORT INFO  ####'
-          f'\nBooks exported: {book_titles}'
-          f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
-          f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
-          f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
-
-
-def create_flashcards(cursor: sqlite3.Cursor, api_key: str, book_titles: List[str]):
-    cards = []  # words successfully found in dictionary
-    failed_words = []  # words where the response from the dictionary was not what we expected
-    missing_words = []  # words not in the dictionary
-    for book_title in book_titles:
-        print(f'\n--- Exporting book: {book_title}')
-
-        lookups = get_lookups(cursor, book_title)
-        for lookup in lookups:
-            word = get_word(lookup)
-            sentence = lookup[2]  # the sentence in which the word was looked up
-            author = get_author(cursor, book_title)
-
-            card = Card(word, sentence, book_title, author)
-            try:
-                card = set_word_meta_data(api_key, card, word)
-                cards.append(card)
-            except KeyError:
-                failed_words.append(card)
-            except TypeError:
-                missing_words.append(card)
-    return cards, failed_words, missing_words
 
 
 def set_word_meta_data(api_key, card, word):
