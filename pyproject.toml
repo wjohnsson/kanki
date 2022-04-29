@@ -1,0 +1,19 @@
+[tool.poetry]
+name = 'kanki'
+version = '0.1.0'
+description = 'Define and export words looked up on Kindle to Anki'
+authors = ['William Johnsson <wjohnsson@gmail.com>']
+
+[tool.poetry.dependencies]
+python = '^3.8'
+requests = '^2.27.1'
+
+[tool.poetry.dev-dependencies]
+requests = '^2.27.1'
+
+[build-system]
+requires = ['poetry-core>=1.0.0']
+build-backend = 'poetry.core.masonry.api'
+
+[tool.poetry.scripts]
+kanki = 'kanki.kanki:main'
