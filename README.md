@@ -39,7 +39,7 @@ optional arguments:
 
 3. For example, to extract all words looked up in two books book run:
 ````shell
-poetry run python kanki --title "Dune" "Hello World" --key "your_api_key" --db_path "path/to/vocab.db"
+poetry run kanki --title "Dune" "Hello World" --key "your_api_key" --db_path "path/to/vocab.db"
 ````
 
 
