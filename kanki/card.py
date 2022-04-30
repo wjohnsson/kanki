@@ -12,7 +12,7 @@ class Card:
         self.definitions = definitions  # definitions
 
     def set_word_meta_data(self, dictionary: MWDictionary, word: str):
-        word_stem, definitions, ipa = dictionary.lookup_word(word)
+        word_stem, definitions, ipa = dictionary.lookup(word)
 
         # The dictionary might give another inflection of a word, different from the one used in the example sentence
         self.word = word_stem

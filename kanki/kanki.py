@@ -43,7 +43,7 @@ def main():
 
     if args.word:
         # For debugging, we can look up single words instead of going through a whole book.
-        dictionary.lookup_word(args.word)
+        dictionary.lookup(args.word)
 
 
 def get_arg_parser():
