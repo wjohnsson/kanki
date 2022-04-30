@@ -108,7 +108,7 @@ class Kanki:
             for lookup in lookups:
                 word = get_word(lookup)
                 sentence = lookup[2]  # the sentence in which the word was looked up
-                author = self.get_author(self.db_cursor, book_title)
+                author = self.get_author(book_title)
 
                 card = Card(word, sentence, book_title, author)
                 try:
@@ -141,23 +141,24 @@ class Kanki:
 
     def get_book_keys(self, book_title: str) -> List[str]:
         """Return the keys used to identify a book in the Kindle vocabulary database."""
-        self.db_cursor.execute(f'SELECT id FROM BOOK_INFO WHERE title = "{book_title}"')
+        sql_query = f'SELECT id FROM BOOK_INFO WHERE title = (?)'
+        self.db_cursor.execute(sql_query, (book_title, ))
         book_keys = self.db_cursor.fetchall()
         return flatten(book_keys)
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups in the given book."""
         book_keys = self.get_book_keys(book_title)
-        condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
-        sql_query = f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key = {condition}'
-        self.db_cursor.execute(sql_query)
+        place_holders = ','.join('?' * len(book_keys))
+        sql_query = f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key IN ({place_holders})'
+        self.db_cursor.execute(sql_query, book_keys)
         rows = self.db_cursor.fetchall()
         return rows
 
     def get_author(self, book_title: str) -> str:
         """Return the author of a book in the Kindle database given the book's title."""
-        sql_query = f'SELECT authors FROM BOOK_INFO WHERE title = "{book_title}"'
-        self.db_cursor.execute(sql_query)
+        sql_query = f'SELECT authors FROM BOOK_INFO WHERE title = ?'
+        self.db_cursor.execute(sql_query, (book_title, ))
         book_author = self.db_cursor.fetchone()[0]
         return book_author
 
