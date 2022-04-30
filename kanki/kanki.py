@@ -16,6 +16,7 @@ def main():
     no_args_given = len(sys.argv) == 1
     if no_args_given:
         arg_parser.print_help()
+        print('Exiting...')
         sys.exit()
 
     api_key_path = 'api_key.txt'
@@ -90,6 +91,7 @@ def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):
         print(f'ERROR: Couldn\'t find file {str(path)}')
         print('You need to add an API key to Merriam-Websters Learners Dictionary using the [-k KEY] argument.\n'
               'See https://www.dictionaryapi.com/.')
+        print('Exiting...')
         sys.exit()
     return api_key
 

@@ -49,8 +49,8 @@ class MWDictionary:
             print('\nERROR: Unable to query Merriam-Webster\'s Dictionary API.')
         elif 'Invalid API key' in response.text:
             print('ERROR: Invalid API key. Make sure it is subscribed to Merriam Websters Learners Dictionary.\n'
-                  'You can replace the current key by providing the argument [-k KEY].\n'
-                  'Exiting...')
+                  'You can replace the current key by providing the argument [-k KEY].')
+            print('Exiting...')
             sys.exit()
 
     @staticmethod
