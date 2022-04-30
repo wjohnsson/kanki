@@ -241,7 +241,7 @@ def get_book_keys(cursor, book_title: str) -> List[str]:
 def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[str, bytes, os.PathLike]):
     """Write all cards to a file in an Anki readable format."""
     datetime_now = datetime.today().strftime('%Y-%m-%d %H:%M')
-    with open(path, 'w') as output:
+    with open(path, 'w', encoding='utf-8') as output:
         # Nice to have some metadata in the export file
         listed_books = ''.join(['\n#  - ' + title for title in book_titles])
         comment = (f'# Card data generated on {datetime_now} by kanki from book(s):'
@@ -271,8 +271,7 @@ def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[
             # Surround all fields in quotes and write in same order as the kanki card type.
             card_data_str = '"{0}"\n'.format('", "'.join(card_data))
 
-            # Had some issues with text encoding, hence the strange need for encoding/decoding
-            output.write(card_data_str.encode('utf-8').decode())
+            output.write(card_data_str)
 
 
 def replace_nones(strings: List[str]):
