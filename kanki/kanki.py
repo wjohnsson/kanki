@@ -6,7 +6,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import List, Tuple, Iterable, Union
 
-import requests
+from card import Card
+from merriam_webster import MWDictionary
 
 
 def main():
@@ -18,15 +19,17 @@ def main():
         arg_parser.print_help()
         sys.exit()
 
-    # API key management
     api_key_path = 'api_key.txt'
     api_key = args.key
     if api_key:
         save_api_key_to_file(api_key, api_key_path)
 
-    dictionary_required = args.title
+    dictionary = None
+    dictionary_required = args.title or args.word
     if dictionary_required:
-        api_key = read_api_key_from_file(api_key_path)
+        if not api_key:
+            api_key = read_api_key_from_file(api_key_path)
+        dictionary = MWDictionary(api_key)
 
     sql_required = args.list or args.title
     if sql_required:
@@ -36,11 +39,11 @@ def main():
             print_books(cursor)
 
         if args.title:
-            export_book_vocab(cursor, api_key, flatten(args.title))
+            export_book_vocab(cursor, dictionary, flatten(args.title))
 
     if args.word:
         # For debugging, we can look up single words instead of going through a whole book.
-        lookup_word(args.word, api_key)
+        dictionary.lookup_word(args.word)
 
 
 def get_arg_parser():
@@ -105,9 +108,9 @@ def print_books(cursor):
         print('  ' + b)
 
 
-def export_book_vocab(cursor: sqlite3.Cursor, api_key: str, book_titles: List[str]):
+def export_book_vocab(cursor: sqlite3.Cursor, dictionary: MWDictionary, book_titles: List[str]):
     """Export all words from the given book titles."""
-    cards, failed_words, missing_words = create_flashcards(cursor, api_key, book_titles)
+    cards, failed_words, missing_words = create_flashcards(cursor, dictionary, book_titles)
 
     successful_words_path = 'kanki_export.txt'
     failed_file_path = 'kanki_failed_words.txt'
@@ -122,7 +125,7 @@ def export_book_vocab(cursor: sqlite3.Cursor, api_key: str, book_titles: List[st
           f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
 
 
-def create_flashcards(cursor: sqlite3.Cursor, api_key: str, book_titles: List[str]):
+def create_flashcards(cursor: sqlite3.Cursor, dictionary: MWDictionary, book_titles: List[str]):
     cards = []  # words successfully found in dictionary
     failed_words = []  # words where the response from the dictionary was not what we expected
     missing_words = []  # words not in the dictionary
@@ -137,78 +140,13 @@ def create_flashcards(cursor: sqlite3.Cursor, api_key: str, book_titles: List[st
 
             card = Card(word, sentence, book_title, author)
             try:
-                card = set_word_meta_data(api_key, card, word)
+                card.set_word_meta_data(dictionary, word)
                 cards.append(card)
             except KeyError:
                 failed_words.append(card)
             except TypeError:
                 missing_words.append(card)
     return cards, failed_words, missing_words
-
-
-def lookup_word(word, api_key):
-    """Looks up a word in the dictionary, returning a card with the word itself,
-    as well as its definition and pronunciation."""
-    api_request = 'https://www.dictionaryapi.com/api/v3/references/learners/json/' + word + '?key=' + api_key
-
-    print('Looking up word: ' + word + '... ')
-    response = requests.get(api_request)
-
-    if response.status_code != 200:
-        print('\nError when querying Merriam-Webster\'s Dictionary API.')
-    elif 'Invalid API key' in response.text:
-        print('Invalid API key. Make sure it is subscribed to Merriam Websters Learners Dictionary.\n'
-              'You can replace the current key by providing the argument [-k KEY].\n'
-              'Exiting...')
-        sys.exit()
-
-    response = response.json()[0]
-    try:
-        # Take the interesting parts of the response
-        word_stem = response['meta']['stems'][0]
-        definitions = response['shortdef']
-        ipa = get_pronunciation(response)
-        print('OK')
-        return word_stem, definitions, ipa
-    except KeyError as err:
-        # Sometimes the response doesn't have the format we expected, will have to handle these edge cases as they
-        # become known.
-        print(f'Response wasn\'t in the expected format. Reason: key {str(err)} not found')
-        raise
-    except TypeError:
-        # If the response isn't a dictionary, it means we get a list of suggested words so looking up keys won't work.
-        print(word + ' not found in Merriam-Webster\'s Learner\'s dictionary!')
-        raise
-
-
-class Card:
-    def __init__(self, word, sentence, book_title, author, ipa=None, definitions=None):
-        self.word = word
-        self.sentence = surround_substring_with_html(sentence, word, 'b')
-        self.book_title = book_title
-        self.author = author
-        self.ipa = ipa  # pronunciation
-        self.definitions = definitions  # definitions
-
-
-def get_pronunciation(response):
-    """Return pronunciation from response."""
-    # Where to find the pronunciation differs from word to word
-    prs = response['hwi'].get('prs', None)
-    altprs = response['hwi'].get('altprs', None)
-
-    ipa = None
-    if prs is not None:
-        # Prefer to use prs
-        ipa = prs[0]['ipa']
-    elif altprs is not None:
-        ipa = altprs[0]['ipa']
-
-    if altprs is None and prs is None:
-        # Couldn't find it in "hwi", it sometimes is in "vrs"
-        ipa = response['vrs'][0]['prs'][0]['ipa']
-
-    return ipa
 
 
 def get_book_dicts(cursor):
@@ -277,22 +215,6 @@ def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[
 def replace_nones(strings: List[str]):
     """Replaces all None to empty string."""
     return list(map(lambda s: '' if s is None else s, strings))
-
-
-def set_word_meta_data(api_key, card, word):
-    word_stem, definitions, ipa = lookup_word(word, api_key)
-
-    # Might give two inflections of a word - could be useful for learning
-    card.word = word_stem
-    card.definitions = definitions
-    card.ipa = ipa
-    return card
-
-
-def surround_substring_with_html(string: str, substring: str, html: str):
-    open_tag = f'<{html}>'
-    close_tag = f'</{html}>'
-    return string.replace(substring, open_tag + substring + close_tag)
 
 
 def get_word(lookup: Tuple) -> str:
