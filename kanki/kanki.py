@@ -2,9 +2,8 @@ import argparse
 import os.path
 import sqlite3
 import sys
-from collections import defaultdict
 from datetime import datetime
-from typing import List, Tuple, Iterable, Union
+from typing import List, Iterable, Union
 
 from card import Card
 from merriam_webster import MWDictionary
@@ -65,6 +64,12 @@ def get_arg_parser():
     return arg_parser
 
 
+class Kanki:
+    def __init__(self):
+        self.dictionary = None
+        self.db_cursor = None
+
+
 def get_sql_cursor(db_path: str) -> sqlite3.Cursor:
     """Return the sqlite cursor connected to the Kindle vocabulary database."""
     if not os.path.isfile(db_path):
@@ -97,7 +102,7 @@ def save_api_key_to_file(key: str, path: Union[str, bytes, os.PathLike]):
               f'Next time you run kanki, this key will be used (unless you provide a new one).\n')
 
 
-def print_books(cursor):
+def print_books(cursor: sqlite3.Cursor):
     """Print all books in database"""
     cursor.execute("SELECT title FROM BOOK_INFO")
     # Some books seem to appear multiple times, so take unique
@@ -149,27 +154,7 @@ def create_flashcards(cursor: sqlite3.Cursor, dictionary: MWDictionary, book_tit
     return cards, failed_words, missing_words
 
 
-def get_book_dicts(cursor):
-    """Return two dictionaries, one from book key to book title and author
-    as well as one from book title to book keys."""
-    cursor.execute('SELECT id, title, authors FROM BOOK_INFO')
-    book_info = cursor.fetchall()
-    key_to_book = dict()
-    # One book can have multiple keys (maybe has something to do with Kindle versions?)
-    title_to_keys = defaultdict(list)
-
-    for book in book_info:
-        book_key = book[0]
-        title = book[1]
-        author = book[2]
-
-        key_to_book[book_key] = (title, author)
-        title_to_keys[title].append(book_key)
-
-    return key_to_book, title_to_keys
-
-
-def get_book_keys(cursor, book_title: str) -> List[str]:
+def get_book_keys(cursor: sqlite3.Cursor, book_title: str) -> List[str]:
     """Return the keys used to identify a book in the Kindle vocabulary database."""
     cursor.execute(f'SELECT id FROM BOOK_INFO WHERE title = "{book_title}"')
     book_keys = cursor.fetchall()
@@ -212,20 +197,20 @@ def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[
             output.write(card_data_str)
 
 
-def replace_nones(strings: List[str]):
-    """Replaces all None to empty string."""
+def replace_nones(strings: List[str]) -> List[str]:
+    """Replaces all Nones in a list with an empty string."""
     return list(map(lambda s: '' if s is None else s, strings))
 
 
-def get_word(lookup: Tuple) -> str:
+def get_word(lookup: tuple) -> str:
     """Return the word from a Kindle lookup"""
     word_index = 0
-    assert lookup[word_index][:2] == 'en', 'Only english words are supported.'
+    assert lookup[word_index][:2] == 'en', 'ERROR: Only english books are supported.'
     word = lookup[word_index][3:]  # remove 'en:' from word_key
     return word
 
 
-def get_lookups(cursor, book_title):
+def get_lookups(cursor: sqlite3.Cursor, book_title: str) -> List[tuple]:
     """Return all Kindle lookups in the given book."""
     book_keys = get_book_keys(cursor, book_title)
     condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
