@@ -3,7 +3,7 @@ import os.path
 import sqlite3
 import sys
 from datetime import datetime
-from typing import List, Iterable, Union
+from typing import List, Iterable, Union, NoReturn, Tuple
 
 from card import Card
 from merriam_webster import MWDictionary
@@ -13,37 +13,37 @@ def main():
     # Argument handling
     arg_parser = get_arg_parser()
     args = arg_parser.parse_args()
+
     no_args_given = len(sys.argv) == 1
     if no_args_given:
         arg_parser.print_help()
         print('Exiting...')
         sys.exit()
 
+    kanki = Kanki()
     api_key_path = 'api_key.txt'
-    api_key = args.key
-    if api_key:
-        save_api_key_to_file(api_key, api_key_path)
+    if args.key:
+        save_api_key_to_file(args.key, api_key_path)
 
-    dictionary = None
     dictionary_required = args.title or args.word
     if dictionary_required:
-        if not api_key:
+        if not args.key:
             api_key = read_api_key_from_file(api_key_path)
-        dictionary = MWDictionary(api_key)
+            kanki.dictionary = MWDictionary(api_key)
 
     sql_required = args.list or args.title
     if sql_required:
-        cursor = get_sql_cursor(args.db_path)
+        kanki.connect_sql_cursor(args.db_path)
 
         if args.list:
-            print_books(cursor)
+            kanki.print_books()
 
         if args.title:
-            export_book_vocab(cursor, dictionary, flatten(args.title))
+            kanki.export_book_vocab(flatten(args.title))
 
     if args.word:
         # For debugging, we can look up single words instead of going through a whole book.
-        dictionary.lookup(args.word)
+        kanki.dictionary.lookup(args.word)
 
 
 def get_arg_parser():
@@ -70,16 +70,87 @@ class Kanki:
         self.dictionary = None
         self.db_cursor = None
 
+    def connect_sql_cursor(self, db_path: str) -> NoReturn:
+        """Connect the sql cursor to the given Kindle vocabulary file."""
+        if not os.path.isfile(db_path):
+            print(f'ERROR: Vocabulary database file {db_path} not found.\n'
+                  f'See kanki documentation on GitHub for how to export it from your Kindle.')
+            print('Exiting...')
+            sys.exit()
+        connection = sqlite3.connect(db_path)
+        self.db_cursor = connection.cursor()
 
-def get_sql_cursor(db_path: str) -> sqlite3.Cursor:
-    """Return the sqlite cursor connected to the Kindle vocabulary database."""
-    if not os.path.isfile(db_path):
-        print(f'ERROR: Vocabulary database file {db_path} not found.\n'
-              f'See kanki documentation on GitHub for how to export it from your Kindle.')
-        sys.exit()
-    connection = sqlite3.connect(db_path)
-    cursor = connection.cursor()
-    return cursor
+    def export_book_vocab(self, book_titles: List[str]):
+        """Export all words from the given book titles."""
+        cards, failed_words, missing_words = self.create_flashcards(book_titles)
+
+        successful_words_path = 'kanki_export.txt'
+        failed_file_path = 'kanki_failed_words.txt'
+
+        write_to_export_file(cards, book_titles, successful_words_path)
+        write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
+
+        print(f'\n####  EXPORT INFO  ####'
+              f'\nBooks exported: {book_titles}'
+              f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
+              f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
+              f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
+
+    def create_flashcards(self, book_titles: List[str]) -> Tuple[List[Card], List[Card], List[Card]]:
+        cards = []  # words successfully found in dictionary
+        failed_words = []  # words where the response from the dictionary was not what we expected
+        missing_words = []  # words not in the dictionary
+
+        for book_title in book_titles:
+            print(f'\n--- Exporting book: {book_title}')
+
+            lookups = self.get_lookups(book_title)
+            for lookup in lookups:
+                word = get_word(lookup)
+                sentence = lookup[2]  # the sentence in which the word was looked up
+                author = self.get_author(self.db_cursor, book_title)
+
+                card = Card(word, sentence, book_title, author)
+                try:
+                    card.set_word_meta_data(self.dictionary, word)
+                    cards.append(card)
+                except KeyError:
+                    failed_words.append(card)
+                except TypeError:
+                    missing_words.append(card)
+        return cards, failed_words, missing_words
+
+    def print_books(self):
+        """Print all books in database"""
+        self.db_cursor.execute("SELECT title FROM BOOK_INFO")
+        # Some books seem to appear multiple times, so take only unique
+        books = set([book_name[0] for book_name in self.db_cursor.fetchall()])
+
+        print('Books:')
+        for b in sorted(books):
+            print('  ' + b)
+
+    def get_book_keys(self, book_title: str) -> List[str]:
+        """Return the keys used to identify a book in the Kindle vocabulary database."""
+        self.db_cursor.execute(f'SELECT id FROM BOOK_INFO WHERE title = "{book_title}"')
+        book_keys = self.db_cursor.fetchall()
+        return flatten(book_keys)
+
+    def get_lookups(self, book_title: str) -> List[tuple]:
+        """Return all Kindle lookups in the given book."""
+        book_keys = self.get_book_keys(book_title)
+        condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
+        sql_query = f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key = {condition}'
+        self.db_cursor.execute(sql_query)
+        rows = self.db_cursor.fetchall()
+        return rows
+
+    def get_author(self, book_title: str) -> str:
+        """Return the author of a book in the Kindle database given the book's title."""
+        sql_query = f'SELECT authors FROM BOOK_INFO WHERE title = "{book_title}"'
+        self.db_cursor.execute(sql_query)
+        book_author = self.db_cursor.fetchone()[0]
+        return book_author
 
 
 def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):
@@ -102,65 +173,6 @@ def save_api_key_to_file(key: str, path: Union[str, bytes, os.PathLike]):
         f.write(key)
         print(f'API key written to {key}.\n'
               f'Next time you run kanki, this key will be used (unless you provide a new one).\n')
-
-
-def print_books(cursor: sqlite3.Cursor):
-    """Print all books in database"""
-    cursor.execute("SELECT title FROM BOOK_INFO")
-    # Some books seem to appear multiple times, so take unique
-    books = set([book_name[0] for book_name in cursor.fetchall()])
-
-    print('Books:')
-    for b in sorted(books):
-        print('  ' + b)
-
-
-def export_book_vocab(cursor: sqlite3.Cursor, dictionary: MWDictionary, book_titles: List[str]):
-    """Export all words from the given book titles."""
-    cards, failed_words, missing_words = create_flashcards(cursor, dictionary, book_titles)
-
-    successful_words_path = 'kanki_export.txt'
-    failed_file_path = 'kanki_failed_words.txt'
-
-    write_to_export_file(cards, book_titles, successful_words_path)
-    write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
-
-    print(f'\n####  EXPORT INFO  ####'
-          f'\nBooks exported: {book_titles}'
-          f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
-          f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
-          f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
-
-
-def create_flashcards(cursor: sqlite3.Cursor, dictionary: MWDictionary, book_titles: List[str]):
-    cards = []  # words successfully found in dictionary
-    failed_words = []  # words where the response from the dictionary was not what we expected
-    missing_words = []  # words not in the dictionary
-    for book_title in book_titles:
-        print(f'\n--- Exporting book: {book_title}')
-
-        lookups = get_lookups(cursor, book_title)
-        for lookup in lookups:
-            word = get_word(lookup)
-            sentence = lookup[2]  # the sentence in which the word was looked up
-            author = get_author(cursor, book_title)
-
-            card = Card(word, sentence, book_title, author)
-            try:
-                card.set_word_meta_data(dictionary, word)
-                cards.append(card)
-            except KeyError:
-                failed_words.append(card)
-            except TypeError:
-                missing_words.append(card)
-    return cards, failed_words, missing_words
-
-
-def get_book_keys(cursor: sqlite3.Cursor, book_title: str) -> List[str]:
-    """Return the keys used to identify a book in the Kindle vocabulary database."""
-    cursor.execute(f'SELECT id FROM BOOK_INFO WHERE title = "{book_title}"')
-    book_keys = cursor.fetchall()
-    return flatten(book_keys)
 
 
 def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[str, bytes, os.PathLike]):
@@ -210,22 +222,6 @@ def get_word(lookup: tuple) -> str:
     assert lookup[word_index][:2] == 'en', 'ERROR: Only english books are supported.'
     word = lookup[word_index][3:]  # remove 'en:' from word_key
     return word
-
-
-def get_lookups(cursor: sqlite3.Cursor, book_title: str) -> List[tuple]:
-    """Return all Kindle lookups in the given book."""
-    book_keys = get_book_keys(cursor, book_title)
-    condition = "'" + "' OR '".join(book_keys) + "'"  # surround keys with single quotes
-    cursor.execute(f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key = {condition}')
-    rows = cursor.fetchall()
-    return rows
-
-
-def get_author(cursor: sqlite3.Cursor, book_title: str) -> str:
-    """Return the author of a book in the Kindle database given the book's title."""
-    cursor.execute(f'SELECT authors FROM BOOK_INFO WHERE title = "{book_title}"')
-    book_author = cursor.fetchone()[0]
-    return book_author
 
 
 def flatten(items: List[Iterable]) -> List:
