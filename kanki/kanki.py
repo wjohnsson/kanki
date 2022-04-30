@@ -122,13 +122,22 @@ class Kanki:
 
     def print_books(self):
         """Print all books in database"""
-        self.db_cursor.execute("SELECT title FROM BOOK_INFO")
+        sql_query = "SELECT title FROM BOOK_INFO"
+        self.db_cursor.execute(sql_query)
         # Some books seem to appear multiple times, so take only unique
         books = set([book_name[0] for book_name in self.db_cursor.fetchall()])
 
-        print('Books:')
-        for b in sorted(books):
-            print('  ' + b)
+        # Pretty printing
+        empty = ''
+        max_book_len = max(map(len, books))
+        digits = len(str(max_book_len))
+        spaces_count = 2
+        dashes_count = max_book_len + digits + spaces_count
+
+        print('Books found:')
+        print(f'{empty:-<{dashes_count}}')
+        for i, book in enumerate(sorted(books)):
+            print(f'{i + 1:<{digits + spaces_count}}{book:<40s}')
 
     def get_book_keys(self, book_title: str) -> List[str]:
         """Return the keys used to identify a book in the Kindle vocabulary database."""
