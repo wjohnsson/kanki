@@ -99,8 +99,8 @@ class Kanki:
               f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
               f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
 
-    def remove_books_until_safe(self, book_titles) -> List[str]:
-        while not self.too_many_api_queries(book_titles):
+    def remove_books_until_safe(self, book_titles: List[str]) -> List[str]:
+        while self.too_many_api_queries(book_titles):
             # Simple solution for now: remove books until we are below the limit.
             # Could maybe be replaced with itertools.dropwhile()
             book_titles.pop()
@@ -186,7 +186,7 @@ class Kanki:
         """Return the number of Kindle lookups in the given book title."""
         book_keys = self.get_book_keys(book_title)
         placeholders = self.get_sql_placeholders(len(book_keys))
-        sql_query = f'SELECT COUNT * FROM BOOK_INFO WHERE book_key IN ({placeholders})'
+        sql_query = f'SELECT COUNT (*) FROM LOOKUPS WHERE book_key IN ({placeholders})'
         self.db_cursor.execute(sql_query, book_keys)
         count = self.db_cursor.fetchone()[0]
         return count
