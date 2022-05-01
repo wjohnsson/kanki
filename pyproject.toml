@@ -1,27 +1,26 @@
 [tool.poetry]
-name = 'kanki'
-version = '0.1.0'
-description = 'Define and export words looked up on Kindle to Anki'
-authors = ['William Johnsson <wjohnsson@gmail.com>']
+name = "kanki"
+version = "0.1.0"
+description = "Define and export words looked up on Kindle to Anki"
+authors = ["William Johnsson <wjohnsson@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = '^3.8'
-requests = '^2.27.1'
+python = "^3.9"
+requests = "^2.27.1"
 
 [tool.poetry.dev-dependencies]
-python = '^3.8'
-requests = '^2.27.1'
+requests = "^2.27.1"
 pytest = "^7.1.2"
 pytest-mock = "^3.7.0"
 
 [build-system]
-requires = ['poetry-core>=1.0.0']
-build-backend = 'poetry.core.masonry.api'
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-kanki = 'kanki.kanki:main'
+kanki = "kanki.kanki:main"
 
 [tool.pytest.ini_options]
 pythonpath = [
-  './kanki'
+  "./kanki"
 ]
