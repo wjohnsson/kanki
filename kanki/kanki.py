@@ -3,7 +3,7 @@ import os.path
 import sqlite3
 import sys
 from datetime import datetime
-from typing import List, Iterable, Union, NoReturn, Tuple
+from typing import List, Iterable, Union, NoReturn, Tuple, Optional
 
 from card import Card
 from merriam_webster import MWDictionary
@@ -67,8 +67,8 @@ def get_arg_parser():
 
 class Kanki:
     def __init__(self):
-        self.dictionary = None
-        self.db_cursor = None
+        self.dictionary: Optional[MWDictionary] = None
+        self.db_cursor: Optional[sqlite3.Cursor] = None
 
     def connect_sql_cursor(self, db_path: str) -> NoReturn:
         """Connect the sql cursor to the given Kindle vocabulary file."""
@@ -82,6 +82,9 @@ class Kanki:
 
     def export_book_vocab(self, book_titles: List[str]):
         """Export all words from the given book titles."""
+
+        book_titles = self.remove_books_until_safe(book_titles)
+
         cards, failed_words, missing_words = self.create_flashcards(book_titles)
 
         successful_words_path = 'kanki_export.txt'
@@ -95,6 +98,23 @@ class Kanki:
               f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
               f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
               f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
+
+    def remove_books_until_safe(self, book_titles) -> List[str]:
+        while not self.too_many_api_queries(book_titles):
+            # Simple solution for now: remove books until we are below the limit.
+            # Could maybe be replaced with itertools.dropwhile()
+            book_titles.pop()
+            if not book_titles:
+                print(f'ERROR: kanki cannot handle the case where one book has more than {self.dictionary.max_queries} '
+                      f'lookups')
+                print('Exiting...')
+                sys.exit()
+        return book_titles
+
+    def too_many_api_queries(self, book_titles) -> bool:
+        """Return true if the given book titles have more lookups than the dictionary supports."""
+        total_lookups = self.count_total_lookups(book_titles)
+        return total_lookups > self.dictionary.max_queries
 
     def create_flashcards(self, book_titles: List[str]) -> Tuple[List[Card], List[Card], List[Card]]:
         cards = []  # words successfully found in dictionary
@@ -141,26 +161,45 @@ class Kanki:
 
     def get_book_keys(self, book_title: str) -> List[str]:
         """Return the keys used to identify a book in the Kindle vocabulary database."""
-        sql_query = f'SELECT id FROM BOOK_INFO WHERE title = (?)'
-        self.db_cursor.execute(sql_query, (book_title, ))
+        sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?)'
+        self.db_cursor.execute(sql_query, (book_title,))
         book_keys = self.db_cursor.fetchall()
         return flatten(book_keys)
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups in the given book."""
         book_keys = self.get_book_keys(book_title)
-        place_holders = ','.join('?' * len(book_keys))
-        sql_query = f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key IN ({place_holders})'
+        placeholders = self.get_sql_placeholders(len(book_keys))
+        sql_query = f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key IN ({placeholders})'
         self.db_cursor.execute(sql_query, book_keys)
         rows = self.db_cursor.fetchall()
         return rows
 
     def get_author(self, book_title: str) -> str:
         """Return the author of a book in the Kindle database given the book's title."""
-        sql_query = f'SELECT authors FROM BOOK_INFO WHERE title = ?'
-        self.db_cursor.execute(sql_query, (book_title, ))
+        sql_query = 'SELECT authors FROM BOOK_INFO WHERE title = ?'
+        self.db_cursor.execute(sql_query, (book_title,))
         book_author = self.db_cursor.fetchone()[0]
         return book_author
+
+    def count_lookups(self, book_title: str) -> int:
+        """Return the number of Kindle lookups in the given book title."""
+        book_keys = self.get_book_keys(book_title)
+        placeholders = self.get_sql_placeholders(len(book_keys))
+        sql_query = f'SELECT COUNT * FROM BOOK_INFO WHERE book_key IN ({placeholders})'
+        self.db_cursor.execute(sql_query, book_keys)
+        count = self.db_cursor.fetchone()[0]
+        return count
+
+    def count_total_lookups(self, book_titles: List[str]) -> int:
+        """Return the total number of Kindle lookups in ALL the given book titles."""
+        return sum(self.count_lookups(book_title) for book_title in book_titles)
+
+    @staticmethod
+    def get_sql_placeholders(amount: int) -> str:
+        """Return the SQL string used for a given amount of placeholders."""
+        placeholders = ','.join('?' * amount)
+        return placeholders
 
 
 def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):

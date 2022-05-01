@@ -11,6 +11,7 @@ class MWDictionary:
     API documentation https://dictionaryapi.com/products/json
     """
     api_base_url = 'https://www.dictionaryapi.com/api/v3/references/learners/json/'
+    max_queries = 1000  # amount of free lookups allowed per day
 
     def __init__(self, api_key: str):
         self.api_key = api_key
