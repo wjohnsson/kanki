@@ -260,8 +260,8 @@ def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[
             output.write(card_data_str)
 
 
-def replace_nones(strings: List[str]) -> List[str]:
-    """Replaces all Nones in a list with an empty string."""
+def replace_nones(strings: List[Optional[str]]) -> List[str]:
+    """Replace all Nones in a list with an empty string."""
     return list(map(lambda s: '' if s is None else s, strings))
 
 
