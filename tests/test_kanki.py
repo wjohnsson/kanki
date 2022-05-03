@@ -1,6 +1,7 @@
 import pytest
 import pytest_mock
 
+import kanki
 from kanki.kanki import Kanki
 from merriam_webster import MWDictionary
 
@@ -34,9 +35,25 @@ def test_remove_unsafe_book(mocker: pytest_mock.MockerFixture):
     kanki.dictionary = MWDictionary('dummy_api_key')
 
     def mock_count_lookups(self, book_title: str):
-        return MWDictionary.max_queries + 1  # represents an unsafe book
+        unsafe_book_lookups = MWDictionary.max_queries + 1
+        return unsafe_book_lookups
 
     mocker.patch.object(Kanki, 'count_lookups', mock_count_lookups)
     with pytest.raises(SystemExit):
         kanki.remove_books_until_safe(['A'])
 
+
+def test_flatten():
+    assert kanki.kanki.flatten([]) == []
+    assert kanki.kanki.flatten([[]]) == []
+    assert kanki.kanki.flatten([[], [], []]) == []
+    assert kanki.kanki.flatten([[], [], [1]]) == [1]
+    assert kanki.kanki.flatten([[1], [2]]) == [1, 2]
+    assert kanki.kanki.flatten([[1, 2], [3]]) == [1, 2, 3]
+
+
+def test_replace_nones():
+    assert kanki.kanki.replace_nones([]) == []
+    assert kanki.kanki.replace_nones([None]) == ['']
+    assert kanki.kanki.replace_nones([None, None]) == ['', '']
+    assert kanki.kanki.replace_nones(['a', None, 'b']) == ['a', '', 'b']
