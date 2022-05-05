@@ -6,8 +6,8 @@ import sys
 from datetime import datetime
 from typing import List, Iterable, Union, NoReturn, Tuple, Optional
 
-from card import Card
-from merriam_webster import MWDictionary
+from .card import Card
+from .merriam_webster import MWDictionary
 
 
 def main():

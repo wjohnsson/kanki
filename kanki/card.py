@@ -1,4 +1,4 @@
-from merriam_webster import MWDictionary
+from .merriam_webster import MWDictionary
 
 
 class Card:
