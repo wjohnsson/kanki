@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os.path
 import sqlite3
 import sys
@@ -10,6 +11,7 @@ from merriam_webster import MWDictionary
 
 
 def main():
+    logging.basicConfig()
     # Argument handling
     arg_parser = get_arg_parser()
     args = arg_parser.parse_args()
@@ -22,14 +24,15 @@ def main():
 
     kanki = Kanki()
     api_key_path = 'api_key.txt'
-    if args.key:
-        save_api_key_to_file(args.key, api_key_path)
+    api_key = args.key
+    if api_key:
+        save_api_key_to_file(api_key, api_key_path)
 
     dictionary_required = args.title or args.word
     if dictionary_required:
-        if not args.key:
+        if not api_key:
             api_key = read_api_key_from_file(api_key_path)
-            kanki.dictionary = MWDictionary(api_key)
+        kanki.dictionary = MWDictionary(api_key)
 
     sql_required = args.list or args.title
     if sql_required:
@@ -73,10 +76,11 @@ class Kanki:
     def connect_sql_cursor(self, db_path: str) -> NoReturn:
         """Connect the sql cursor to the given Kindle vocabulary file."""
         if not os.path.isfile(db_path):
-            print(f'ERROR: Vocabulary database file {db_path} not found.\n'
-                  f'See kanki documentation on GitHub for how to export it from your Kindle.')
+            logging.error(f'Vocabulary database file "{db_path}" not found.\n')
+            print(f'See https://github.com/wjohnsson/kanki/blob/master/README.md#usage how to transfer the file from '
+                  f'your Kindle.')
             print('Exiting...')
-            sys.exit()
+            sys.exit(1)
         connection = sqlite3.connect(db_path)
         self.db_cursor = connection.cursor()
 
@@ -105,10 +109,10 @@ class Kanki:
             # Could maybe be replaced with itertools.dropwhile()
             book_titles.pop()
             if not book_titles:
-                print(f'ERROR: kanki cannot handle the case where one book has more than {self.dictionary.max_queries} '
-                      f'lookups')
+                logging.error(f'ERROR: kanki cannot handle the case where one book has more than '
+                              f'{self.dictionary.max_queries} lookups')
                 print('Exiting...')
-                sys.exit()
+                sys.exit(1)
         return book_titles
 
     def too_many_api_queries(self, book_titles) -> bool:
@@ -208,11 +212,11 @@ def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):
         with open(path, 'r') as f:
             api_key = f.read()
     except FileNotFoundError:
-        print(f'ERROR: Couldn\'t find file {str(path)}')
-        print('You need to add an API key to Merriam-Websters Learners Dictionary using the [-k KEY] argument.\n'
-              'See https://www.dictionaryapi.com/.')
+        logging.error(f'Couldn\'t find API key file "{str(path)}".')
+        print(f'You need to add an API key to Merriam-Websters Learners Dictionary using the [-k KEY] argument.\n'
+              f'See https://www.dictionaryapi.com/.')
         print('Exiting...')
-        sys.exit()
+        sys.exit(1)
     return api_key
 
 
@@ -220,7 +224,7 @@ def save_api_key_to_file(key: str, path: Union[str, bytes, os.PathLike]):
     """Save the user's API key to file (as plaintext)."""
     with open(path, 'w') as f:
         f.write(key)
-        print(f'API key written to {key}.\n'
+        print(f'API key written to "{path}".\n'
               f'Next time you run kanki, this key will be used (unless you provide a new one).\n')
 
 

@@ -1,3 +1,4 @@
+import logging
 import sys
 from typing import List, Tuple, NoReturn, Optional
 
@@ -36,23 +37,25 @@ class MWDictionary:
         except KeyError as err:
             # Sometimes the response doesn't have the format we expected, will have to handle these edge cases as they
             # become known.
-            print(f'Response wasn\'t in the expected format. Reason: key {str(err)} not found')
+            logging.warning(f'Response wasn\'t in the expected format. Reason: key {str(err)} not found')
             raise
         except TypeError:
             # If the response isn't a dictionary, it means we get a list of suggested words so looking up keys won't
             # work.
-            print(word + ' not found in Merriam-Webster\'s Learner\'s dictionary!')
+            logging.warning(word + ' not found in Merriam-Webster\'s Learner\'s dictionary!')
             raise
 
     @staticmethod
     def check_response(response: requests.Response) -> NoReturn:
         if response.status_code != 200:
-            print('\nERROR: Unable to query Merriam-Webster\'s Dictionary API.')
+            logging.error('Unable to query Merriam-Webster\'s Dictionary API.')
         elif 'Invalid API key' in response.text:
-            print('ERROR: Invalid API key. Make sure it is subscribed to Merriam Websters Learners Dictionary.\n'
+            api_key = response.request.url.split('?key=')[-1]
+            logging.error(f'Invalid API key: {api_key}')
+            print('Make sure your API key is subscribed to Merriam Websters Learner\'s Dictionary.\n'
                   'You can replace the current key by providing the argument [-k KEY].')
             print('Exiting...')
-            sys.exit()
+            sys.exit(1)
 
     @staticmethod
     def get_word_definition(entry: dict) -> List[str]:
