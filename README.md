@@ -37,7 +37,7 @@ optional arguments:
 1. Plug in your Kindle and search for `vocab.db` (mine was in the hidden folder `system/vocabulary`).
 2. Create an account on [Merriam Webster's Developer Center](https://www.dictionaryapi.com/) to generate an API key to the Learner's Dictionary.
 
-3. For example, to extract all words looked up in two books book run:
+3. For example, to extract all words looked up in the books _Dune_ and _Hello World_, run:
 ````shell
 poetry run kanki --title "Dune" "Hello World" --key "your_api_key" --db_path "path/to/vocab.db"
 ````
