@@ -42,7 +42,7 @@ def main():
             kanki.print_books()
 
         if args.title:
-            kanki.export_book_vocab(flatten(args.title))
+            kanki.export_book_lookups(kanki.flatten(args.title))
 
     if args.word:
         # For debugging, we can look up single words instead of going through a whole book.
@@ -50,7 +50,6 @@ def main():
 
 
 def get_arg_parser():
-    """Add arguments and parse user input"""
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('-l', '--list',
                             help='list books in vocabulary file',
@@ -66,6 +65,28 @@ def get_arg_parser():
     arg_parser.add_argument('-w', '--word',
                             help='a single word to look up in the dictionary.')
     return arg_parser
+
+
+def save_api_key_to_file(key: str, path: Union[str, bytes, os.PathLike]):
+    """Save the user's API key to file (as plaintext)."""
+    with open(path, 'w') as f:
+        f.write(key)
+        print(f'API key written to "{path}".\n'
+              f'Next time you run kanki, this key will be used (unless you provide a new one).\n')
+
+
+def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):
+    """Read API key that might be saved in a file, if kanki was used before."""
+    try:
+        with open(path, 'r') as f:
+            api_key = f.read()
+    except FileNotFoundError:
+        logging.error(f'Couldn\'t find API key file "{str(path)}".')
+        print(f'You need to add an API key to Merriam-Websters Learners Dictionary using the [-k KEY] argument.\n'
+              f'See https://www.dictionaryapi.com/.')
+        print('Exiting...')
+        sys.exit(1)
+    return api_key
 
 
 class Kanki:
@@ -84,9 +105,8 @@ class Kanki:
         connection = sqlite3.connect(db_path)
         self.db_cursor = connection.cursor()
 
-    def export_book_vocab(self, book_titles: List[str]):
-        """Export all words from the given book titles."""
-
+    def export_book_lookups(self, book_titles: List[str]):
+        """Export all lookups in the given book titles to a Kanki readable format."""
         book_titles = self.remove_books_until_safe(book_titles)
 
         cards, failed_words, missing_words = self.create_flashcards(book_titles)
@@ -94,8 +114,8 @@ class Kanki:
         successful_words_path = 'kanki_export.txt'
         failed_file_path = 'kanki_failed_words.txt'
 
-        write_to_export_file(cards, book_titles, successful_words_path)
-        write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
+        self.write_to_export_file(cards, book_titles, successful_words_path)
+        self.write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
 
         print(f'\n####  EXPORT INFO  ####'
               f'\nBooks exported: {book_titles}'
@@ -130,7 +150,7 @@ class Kanki:
 
             lookups = self.get_lookups(book_title)
             for lookup in lookups:
-                word = get_word(lookup)
+                word = self.get_word(lookup)
                 sentence = lookup[2]  # the sentence in which the word was looked up
                 author = self.get_author(book_title)
 
@@ -144,8 +164,16 @@ class Kanki:
                     missing_words.append(card)
         return cards, failed_words, missing_words
 
+    @staticmethod
+    def get_word(lookup: tuple) -> str:
+        """Return the word from a Kindle lookup."""
+        word_index = 0
+        assert lookup[word_index][:2] == 'en', 'ERROR: Only english books are supported.'
+        word = lookup[word_index][3:]  # remove 'en:' from word_key
+        return word
+
     def print_books(self):
-        """Print all books in database"""
+        """Print all books in the Kindle database."""
         sql_query = "SELECT title FROM BOOK_INFO"
         self.db_cursor.execute(sql_query)
         # Some books seem to appear multiple times, so take only unique
@@ -168,7 +196,7 @@ class Kanki:
         sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?)'
         self.db_cursor.execute(sql_query, (book_title,))
         book_keys = self.db_cursor.fetchall()
-        return flatten(book_keys)
+        return self.flatten(book_keys)
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups in the given book."""
@@ -205,80 +233,50 @@ class Kanki:
         placeholders = ','.join('?' * amount)
         return placeholders
 
+    @staticmethod
+    def flatten(items: List[Iterable]) -> List:
+        return [item for sublist in items for item in sublist]
 
-def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):
-    """Read API key that might be saved in a file, if kanki was used before."""
-    try:
-        with open(path, 'r') as f:
-            api_key = f.read()
-    except FileNotFoundError:
-        logging.error(f'Couldn\'t find API key file "{str(path)}".')
-        print(f'You need to add an API key to Merriam-Websters Learners Dictionary using the [-k KEY] argument.\n'
-              f'See https://www.dictionaryapi.com/.')
-        print('Exiting...')
-        sys.exit(1)
-    return api_key
+    @staticmethod
+    def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[str, bytes, os.PathLike]):
+        """Write all cards to a file in an Anki readable format."""
+        datetime_now = datetime.today().strftime('%Y-%m-%d %H:%M')
+        with open(path, 'w', encoding='utf-8') as output:
+            # Nice to have some metadata in the export file
+            listed_books = ''.join(['\n#  - ' + title for title in book_titles])
+            comment = (f'# Card data generated on {datetime_now} by kanki from book(s):'
+                       f'{listed_books}'
+                       '\n#'
+                       '\n# Format:'
+                       '\n# word,pronunciation,sentence,definition,author\n\n')
+            output.write(comment)
 
+            for card in cards:
+                definitions = card.definitions
+                if card.definitions is not None:
+                    # A word may have multiple definitions, join them with a semicolon.
+                    definitions = '; '.join(card.definitions)
 
-def save_api_key_to_file(key: str, path: Union[str, bytes, os.PathLike]):
-    """Save the user's API key to file (as plaintext)."""
-    with open(path, 'w') as f:
-        f.write(key)
-        print(f'API key written to "{path}".\n'
-              f'Next time you run kanki, this key will be used (unless you provide a new one).\n')
+                # Collect all card data in a list and make sure all double quotes are
+                # single quotes in the file so that it is readable by Anki
+                card_data = [card.word,
+                             card.ipa,
+                             card.sentence.replace('"', '\''),
+                             definitions,
+                             card.book_title.replace('"', '\''),
+                             card.author]
+                card_data = Kanki.replace_nones(card_data)
 
+                # Anki accepts plaintext files with fields separated by commas.
+                # Surround all fields in quotes and write in same order as the kanki card type.
+                card_data_str = '"{0}"\n'.format('", "'.join(card_data))
 
-def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[str, bytes, os.PathLike]):
-    """Write all cards to a file in an Anki readable format."""
-    datetime_now = datetime.today().strftime('%Y-%m-%d %H:%M')
-    with open(path, 'w', encoding='utf-8') as output:
-        # Nice to have some metadata in the export file
-        listed_books = ''.join(['\n#  - ' + title for title in book_titles])
-        comment = (f'# Card data generated on {datetime_now} by kanki from book(s):'
-                   f'{listed_books}'
-                   '\n#'
-                   '\n# Format:'
-                   '\n# word,pronunciation,sentence,definition,author\n\n')
-        output.write(comment)
+                output.write(card_data_str)
 
-        for card in cards:
-            definitions = card.definitions
-            if card.definitions is not None:
-                # A word may have multiple definitions, join them with a semicolon.
-                definitions = '; '.join(card.definitions)
-
-            # Collect all card data in a list and make sure all double quotes are
-            # single quotes in the file so that it is readable by Anki
-            card_data = [card.word,
-                         card.ipa,
-                         card.sentence.replace('"', '\''),
-                         definitions,
-                         card.book_title.replace('"', '\''),
-                         card.author]
-            card_data = replace_nones(card_data)
-
-            # Anki accepts plaintext files with fields separated by commas.
-            # Surround all fields in quotes and write in same order as the kanki card type.
-            card_data_str = '"{0}"\n'.format('", "'.join(card_data))
-
-            output.write(card_data_str)
-
-
-def replace_nones(strings: List[Optional[str]]) -> List[str]:
-    """Replace all Nones in a list with an empty string."""
-    return list(map(lambda s: '' if s is None else s, strings))
-
-
-def get_word(lookup: tuple) -> str:
-    """Return the word from a Kindle lookup"""
-    word_index = 0
-    assert lookup[word_index][:2] == 'en', 'ERROR: Only english books are supported.'
-    word = lookup[word_index][3:]  # remove 'en:' from word_key
-    return word
-
-
-def flatten(items: List[Iterable]) -> List:
-    return [item for sublist in items for item in sublist]
+    @staticmethod
+    def replace_nones(strings: List[Optional[str]]) -> List[str]:
+        """Replace all Nones in a list with an empty string."""
+        return list(map(lambda s: '' if s is None else s, strings))
 
 
 if __name__ == '__main__':

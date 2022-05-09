@@ -1,7 +1,6 @@
 import pytest
 import pytest_mock
 
-import kanki
 from kanki.kanki import Kanki
 from merriam_webster import MWDictionary
 
@@ -44,16 +43,16 @@ def test_remove_unsafe_book(mocker: pytest_mock.MockerFixture):
 
 
 def test_flatten():
-    assert kanki.kanki.flatten([]) == []
-    assert kanki.kanki.flatten([[]]) == []
-    assert kanki.kanki.flatten([[], [], []]) == []
-    assert kanki.kanki.flatten([[], [], [1]]) == [1]
-    assert kanki.kanki.flatten([[1], [2]]) == [1, 2]
-    assert kanki.kanki.flatten([[1, 2], [3]]) == [1, 2, 3]
+    assert Kanki.flatten([]) == []
+    assert Kanki.flatten([[]]) == []
+    assert Kanki.flatten([[], [], []]) == []
+    assert Kanki.flatten([[], [], [1]]) == [1]
+    assert Kanki.flatten([[1], [2]]) == [1, 2]
+    assert Kanki.flatten([[1, 2], [3]]) == [1, 2, 3]
 
 
 def test_replace_nones():
-    assert kanki.kanki.replace_nones([]) == []
-    assert kanki.kanki.replace_nones([None]) == ['']
-    assert kanki.kanki.replace_nones([None, None]) == ['', '']
-    assert kanki.kanki.replace_nones(['a', None, 'b']) == ['a', '', 'b']
+    assert Kanki.replace_nones([]) == []
+    assert Kanki.replace_nones([None]) == ['']
+    assert Kanki.replace_nones([None, None]) == ['', '']
+    assert Kanki.replace_nones(['a', None, 'b']) == ['a', '', 'b']
