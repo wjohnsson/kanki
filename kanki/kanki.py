@@ -6,8 +6,8 @@ import sys
 from datetime import datetime
 from typing import List, Iterable, Union, NoReturn, Tuple, Optional
 
-from card import Card
-from merriam_webster import MWDictionary
+from .card import Card
+from .merriam_webster import MWDictionary
 
 
 def main():
@@ -105,7 +105,7 @@ class Kanki:
         connection = sqlite3.connect(db_path)
         self.db_cursor = connection.cursor()
 
-    def export_book_lookups(self, book_titles: List[str]):
+    def export_book_lookups(self, book_titles: List[str]) -> NoReturn:
         """Export all lookups in the given book titles to a Kanki readable format."""
         book_titles = self.remove_books_until_safe(book_titles)
 
@@ -172,7 +172,7 @@ class Kanki:
         word = lookup[word_index][3:]  # remove 'en:' from word_key
         return word
 
-    def print_books(self):
+    def print_books(self) -> NoReturn:
         """Print all books in the Kindle database."""
         sql_query = "SELECT title FROM BOOK_INFO"
         self.db_cursor.execute(sql_query)
@@ -238,13 +238,24 @@ class Kanki:
         return [item for sublist in items for item in sublist]
 
     @staticmethod
-    def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[str, bytes, os.PathLike]):
+    def write_to_export_file(cards: List[Card],
+                             book_titles: List[str],
+                             path: Union[str, bytes, os.PathLike]) -> NoReturn:
         """Write all cards to file in an Anki readable format."""
         with open(path, 'w', encoding='utf-8') as output:
             output.write(Kanki.metadata_about_export(book_titles))
 
             for card in cards:
                 output.write(card.get_csv_encoding())
+
+        if not cards:
+            return
+        # Sanity check
+        number_of_fields = len(vars(cards[0]))
+        expected_number_of_fields = len(cards[0].card_fields_in_order())
+        if number_of_fields > expected_number_of_fields:
+            logging.warning(f'The number of fields in a card have increased,'
+                            f'consider adding them to the Anki card type.')
 
     @staticmethod
     def metadata_about_export(book_titles: List[str]) -> str:
