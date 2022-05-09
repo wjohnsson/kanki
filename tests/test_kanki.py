@@ -51,8 +51,3 @@ def test_flatten():
     assert Kanki.flatten([[1, 2], [3]]) == [1, 2, 3]
 
 
-def test_replace_nones():
-    assert Kanki.replace_nones([]) == []
-    assert Kanki.replace_nones([None]) == ['']
-    assert Kanki.replace_nones([None, None]) == ['', '']
-    assert Kanki.replace_nones(['a', None, 'b']) == ['a', '', 'b']

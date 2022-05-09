@@ -6,8 +6,8 @@ import sys
 from datetime import datetime
 from typing import List, Iterable, Union, NoReturn, Tuple, Optional
 
-from .card import Card
-from .merriam_webster import MWDictionary
+from card import Card
+from merriam_webster import MWDictionary
 
 
 def main():
@@ -42,7 +42,7 @@ def main():
             kanki.print_books()
 
         if args.title:
-            kanki.export_book_lookups(kanki.flatten(args.title))
+            kanki.export_book_lookups(Kanki.flatten(args.title))
 
     if args.word:
         # For debugging, we can look up single words instead of going through a whole book.
@@ -97,9 +97,9 @@ class Kanki:
     def connect_sql_cursor(self, db_path: str) -> NoReturn:
         """Connect the sql cursor to the given Kindle vocabulary file."""
         if not os.path.isfile(db_path):
-            logging.error(f'Vocabulary database file "{db_path}" not found.\n')
-            print(f'See https://github.com/wjohnsson/kanki/blob/master/README.md#usage how to transfer the file from '
-                  f'your Kindle.')
+            logging.error(f'Vocabulary database file "{db_path}" not found')
+            print(f'See https://github.com/wjohnsson/kanki/blob/master/README.md#usage how to find the Kindle '
+                  f'vocabulary database file.')
             print('Exiting...')
             sys.exit(1)
         connection = sqlite3.connect(db_path)
@@ -114,8 +114,8 @@ class Kanki:
         successful_words_path = 'kanki_export.txt'
         failed_file_path = 'kanki_failed_words.txt'
 
-        self.write_to_export_file(cards, book_titles, successful_words_path)
-        self.write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
+        Kanki.write_to_export_file(cards, book_titles, successful_words_path)
+        Kanki.write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
 
         print(f'\n####  EXPORT INFO  ####'
               f'\nBooks exported: {book_titles}'
@@ -150,7 +150,7 @@ class Kanki:
 
             lookups = self.get_lookups(book_title)
             for lookup in lookups:
-                word = self.get_word(lookup)
+                word = Kanki.get_word(lookup)
                 sentence = lookup[2]  # the sentence in which the word was looked up
                 author = self.get_author(book_title)
 
@@ -196,12 +196,12 @@ class Kanki:
         sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?)'
         self.db_cursor.execute(sql_query, (book_title,))
         book_keys = self.db_cursor.fetchall()
-        return self.flatten(book_keys)
+        return Kanki.flatten(book_keys)
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups in the given book."""
         book_keys = self.get_book_keys(book_title)
-        placeholders = self.get_sql_placeholders(len(book_keys))
+        placeholders = Kanki.get_sql_placeholders(len(book_keys))
         sql_query = f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key IN ({placeholders})'
         self.db_cursor.execute(sql_query, book_keys)
         rows = self.db_cursor.fetchall()
@@ -217,7 +217,7 @@ class Kanki:
     def count_lookups(self, book_title: str) -> int:
         """Return the number of Kindle lookups in the given book title."""
         book_keys = self.get_book_keys(book_title)
-        placeholders = self.get_sql_placeholders(len(book_keys))
+        placeholders = Kanki.get_sql_placeholders(len(book_keys))
         sql_query = f'SELECT COUNT (*) FROM LOOKUPS WHERE book_key IN ({placeholders})'
         self.db_cursor.execute(sql_query, book_keys)
         count = self.db_cursor.fetchone()[0]
@@ -239,44 +239,23 @@ class Kanki:
 
     @staticmethod
     def write_to_export_file(cards: List[Card], book_titles: List[str], path: Union[str, bytes, os.PathLike]):
-        """Write all cards to a file in an Anki readable format."""
-        datetime_now = datetime.today().strftime('%Y-%m-%d %H:%M')
+        """Write all cards to file in an Anki readable format."""
         with open(path, 'w', encoding='utf-8') as output:
-            # Nice to have some metadata in the export file
-            listed_books = ''.join(['\n#  - ' + title for title in book_titles])
-            comment = (f'# Card data generated on {datetime_now} by kanki from book(s):'
-                       f'{listed_books}'
-                       '\n#'
-                       '\n# Format:'
-                       '\n# word,pronunciation,sentence,definition,author\n\n')
-            output.write(comment)
+            output.write(Kanki.metadata_about_export(book_titles))
 
             for card in cards:
-                definitions = card.definitions
-                if card.definitions is not None:
-                    # A word may have multiple definitions, join them with a semicolon.
-                    definitions = '; '.join(card.definitions)
-
-                # Collect all card data in a list and make sure all double quotes are
-                # single quotes in the file so that it is readable by Anki
-                card_data = [card.word,
-                             card.ipa,
-                             card.sentence.replace('"', '\''),
-                             definitions,
-                             card.book_title.replace('"', '\''),
-                             card.author]
-                card_data = Kanki.replace_nones(card_data)
-
-                # Anki accepts plaintext files with fields separated by commas.
-                # Surround all fields in quotes and write in same order as the kanki card type.
-                card_data_str = '"{0}"\n'.format('", "'.join(card_data))
-
-                output.write(card_data_str)
+                output.write(card.get_csv_encoding())
 
     @staticmethod
-    def replace_nones(strings: List[Optional[str]]) -> List[str]:
-        """Replace all Nones in a list with an empty string."""
-        return list(map(lambda s: '' if s is None else s, strings))
+    def metadata_about_export(book_titles: List[str]) -> str:
+        datetime_now = datetime.today().strftime('%Y-%m-%d %H:%M')
+        itemized_books = ''.join([f'#  - {title}\n' for title in book_titles])
+        metadata = (f'# Card data generated on {datetime_now} by kanki from book(s):\n'
+                    f'{itemized_books}'
+                    '#\n'
+                    '# Format:\n'
+                    '# word,pronunciation,sentence,definition,author\n\n')
+        return metadata
 
 
 if __name__ == '__main__':

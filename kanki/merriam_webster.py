@@ -42,7 +42,7 @@ class MWDictionary:
         except TypeError:
             # If the response isn't a dictionary, it means we get a list of suggested words so looking up keys won't
             # work.
-            logging.warning(word + ' not found in Merriam-Webster\'s Learner\'s dictionary!')
+            print(f'{word} not found in Merriam-Webster\'s Learner\'s dictionary!')
             raise
 
     @staticmethod
