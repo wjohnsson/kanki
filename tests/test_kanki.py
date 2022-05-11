@@ -1,7 +1,7 @@
 import pytest
 import pytest_mock
 
-from kanki.kanki import Kanki
+from kanki import Kanki
 from merriam_webster import MWDictionary
 
 
