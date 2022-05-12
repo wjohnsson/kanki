@@ -1,4 +1,4 @@
-from kanki import Card
+from kanki.card import Card
 
 
 def test_replace_nones():

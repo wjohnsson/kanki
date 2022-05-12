@@ -5,9 +5,9 @@ import os.path
 import sqlite3
 import sys
 from datetime import datetime
-from typing import List, Iterable, NoReturn, Tuple, Optional
-from typing import Union
+from typing import Iterable, List, Optional, Tuple, Union
 
+from kanki.exceptions import MissingBookError
 from kanki.card import Card
 from kanki.merriam_webster import MWDictionary
 
@@ -44,7 +44,8 @@ def main():
             kanki.print_books()
 
         if args.title:
-            kanki.export_book_lookups(Kanki.flatten(args.title))
+            kanki.book_titles = Kanki.flatten(args.title)
+            kanki.export_book_lookups()
 
     if args.word:
         # For debugging, we can look up single words instead of going through a whole book.
@@ -92,11 +93,12 @@ def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):
 
 
 class Kanki:
-    def __init__(self):
-        self.dictionary: Optional[MWDictionary] = None
-        self.db_cursor: Optional[sqlite3.Cursor] = None
+    def __init__(self, dictionary=None, db_cursor=None, book_titles=None):
+        self.dictionary: Optional[MWDictionary] = dictionary
+        self.db_cursor: Optional[sqlite3.Cursor] = db_cursor
+        self.book_titles: Optional[List[str]] = book_titles
 
-    def connect_sql_cursor(self, db_path: str) -> NoReturn:
+    def connect_sql_cursor(self, db_path: str) -> None:
         """Connect the sql cursor to the given Kindle vocabulary file."""
         if not os.path.isfile(db_path):
             logging.error(f'Vocabulary database file "{db_path}" not found')
@@ -107,62 +109,62 @@ class Kanki:
         connection = sqlite3.connect(db_path)
         self.db_cursor = connection.cursor()
 
-    def export_book_lookups(self, book_titles: List[str]) -> NoReturn:
+    def export_book_lookups(self) -> None:
         """Export all lookups in the given book titles to a Kanki readable format."""
-        if not self.all_exist(book_titles):
+        if not self.all_books_exist():
             print('Make sure all given book titles match the output given by --list')
             print('Exiting...')
             sys.exit(1)
 
-        book_titles = self.remove_books_until_safe(book_titles)
+        self.book_titles = self.remove_books_until_safe()
 
-        cards, failed_words, missing_words = self.create_flashcards(book_titles)
+        cards, failed_words, missing_words = self.create_flashcards()
 
         successful_words_path = 'kanki_export.txt'
         failed_file_path = 'kanki_failed_words.txt'
 
-        Kanki.write_to_export_file(cards, book_titles, successful_words_path)
-        Kanki.write_to_export_file(failed_words + missing_words, book_titles, failed_file_path)
+        self.write_to_export_file(cards, successful_words_path)
+        self.write_to_export_file(failed_words + missing_words, failed_file_path)
 
         print(f'\n####  EXPORT INFO  ####'
-              f'\nBooks exported: {book_titles}'
+              f'\nBooks exported: {self.book_titles}'
               f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
               f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
               f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
 
-    def all_exist(self, book_titles: List[str]):
-        sql_query = 'SELECT 1 FROM BOOK_INFO WHERE title = ?'
+    def all_books_exist(self):
         existing_titles = dict()
-        for title in book_titles:
-            self.db_cursor.execute(sql_query, (title, ))
+        sql_query = 'SELECT 1 FROM BOOK_INFO WHERE title = ?'
+
+        for title in self.book_titles:
+            self.db_cursor.execute(sql_query, (title,))
             exists = bool(self.db_cursor.fetchone())
             existing_titles[title] = exists
             if not exists:
                 logging.error(f'Title \'{title}\' does not exist in the database')
+
         return all(existing_titles.values())
 
-    def remove_books_until_safe(self, book_titles: List[str]) -> List[str]:
-        while self.too_many_api_queries(book_titles):
-            # Simple solution for now: remove books until we are below the limit.
-            # Could maybe be replaced with itertools.dropwhile()
-            book_titles.pop()
-            if not book_titles:
+    def remove_books_until_safe(self) -> List[str]:
+        """Remove books until we are below the API query limit."""
+        remaining_books = self.book_titles.copy()  # to ensure the function has no side effects
+
+        # TODO: See if this can be replaced with itertools.dropwhile()
+        while self.too_many_api_queries(remaining_books):
+            remaining_books.pop()
+            if not remaining_books:
                 logging.error(f'ERROR: kanki cannot handle the case where one book has more than '
                               f'{self.dictionary.max_queries} lookups')
                 print('The chosen book(s) have too many lookups for the free version of Merriam Webster\'s API. '
                       'Please choose another set of books.')
                 print('Exiting...')
                 sys.exit(1)
-        return book_titles
+        return remaining_books
 
-    def too_many_api_queries(self, book_titles) -> bool:
+    def too_many_api_queries(self, books: List[str]) -> bool:
         """Return true if the given book titles have more lookups than the dictionary supports."""
-        total_lookups = self.count_total_lookups(book_titles)
+        total_lookups = sum(self.count_lookups(b) for b in books)
         return total_lookups > self.dictionary.max_queries
-
-    def count_total_lookups(self, book_titles: List[str]) -> int:
-        """Return the total number of Kindle lookups in ALL the given book titles."""
-        return sum(self.count_lookups(book_title) for book_title in book_titles)
 
     def count_lookups(self, book_title: str) -> int:
         """Return the number of Kindle lookups in the given book title."""
@@ -173,12 +175,23 @@ class Kanki:
         count = self.db_cursor.fetchone()[0]
         return count
 
-    def create_flashcards(self, book_titles: List[str]) -> Tuple[List[Card], List[Card], List[Card]]:
+    def get_book_keys(self, book_title: str) -> List[str]:
+        """Return the keys used to identify a book in the Kindle vocabulary database."""
+        sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?)'
+        self.db_cursor.execute(sql_query, (book_title,))
+        book_keys = self.db_cursor.fetchall()
+
+        if not book_keys:
+            raise MissingBookError(f'The book {book_title} is not in the vocabulary database')
+
+        return Kanki.flatten(book_keys)
+
+    def create_flashcards(self) -> Tuple[List[Card], List[Card], List[Card]]:
         cards = []  # words successfully found in dictionary
         failed_words = []  # words where the response from the dictionary was not what we expected
         missing_words = []  # words not in the dictionary
 
-        for book_title in book_titles:
+        for book_title in self.book_titles:
             print(f'\n--- Exporting book: {book_title}')
 
             lookups = self.get_lookups(book_title)
@@ -205,7 +218,7 @@ class Kanki:
         word = lookup[word_index][3:]  # remove 'en:' from word_key
         return word
 
-    def print_books(self) -> NoReturn:
+    def print_books(self) -> None:
         """Print all books in the Kindle database."""
         sql_query = "SELECT title FROM BOOK_INFO"
         self.db_cursor.execute(sql_query)
@@ -223,13 +236,6 @@ class Kanki:
         print(f'{empty:-<{dashes_count}}')
         for i, book in enumerate(sorted(books)):
             print(f'{i + 1:<{digits + spaces_count}}{book:<40s}')
-
-    def get_book_keys(self, book_title: str) -> List[str]:
-        """Return the keys used to identify a book in the Kindle vocabulary database."""
-        sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?)'
-        self.db_cursor.execute(sql_query, (book_title,))
-        book_keys = self.db_cursor.fetchall()
-        return Kanki.flatten(book_keys)
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups in the given book."""
@@ -250,6 +256,11 @@ class Kanki:
     @staticmethod
     def get_sql_placeholders(amount: int) -> str:
         """Return the SQL string used for a given amount of placeholders."""
+        if amount <= 0:
+            raise ValueError(f'Bad number of placeholders: {amount}, expected a non-zero positive amount')
+        if amount > 999:
+            raise ValueError('sqlite only supports 999 placeholders: '
+                             'https://www.sqlite.org/limits.html#max_variable_number')
         placeholders = ','.join('?' * amount)
         return placeholders
 
@@ -257,13 +268,10 @@ class Kanki:
     def flatten(items: List[Iterable]) -> List:
         return [item for sublist in items for item in sublist]
 
-    @staticmethod
-    def write_to_export_file(cards: List[Card],
-                             book_titles: List[str],
-                             path: Union[str, bytes, os.PathLike]) -> NoReturn:
+    def write_to_export_file(self, cards: List[Card], path: Union[str, bytes, os.PathLike]) -> None:
         """Write all cards to file in an Anki readable format."""
         with open(path, 'w', encoding='utf-8') as output:
-            output.write(Kanki.metadata_about_export(book_titles))
+            output.write(self.metadata_about_export())
 
             for card in cards:
                 output.write(card.get_csv_encoding())
@@ -277,10 +285,9 @@ class Kanki:
             logging.warning(f'The number of fields in a card have increased,'
                             f'consider adding them to the Anki card type.')
 
-    @staticmethod
-    def metadata_about_export(book_titles: List[str]) -> str:
+    def metadata_about_export(self) -> str:
         datetime_now = datetime.today().strftime('%Y-%m-%d %H:%M')
-        itemized_books = ''.join([f'#  - {title}\n' for title in book_titles])
+        itemized_books = ''.join([f'#  - {title}\n' for title in self.book_titles])
         metadata = (f'# Card data generated on {datetime_now} by kanki from book(s):\n'
                     f'{itemized_books}'
                     '#\n'
