@@ -7,9 +7,9 @@ authors = ["William Johnsson <wjohnsson@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.9"
 requests = "^2.27.1"
+tabulate = "^0.8.9"
 
 [tool.poetry.dev-dependencies]
-requests = "^2.27.1"
 pytest = "^7.1.2"
 pytest-mock = "^3.7.0"
 

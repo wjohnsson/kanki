@@ -6,6 +6,7 @@ import sqlite3
 import sys
 from datetime import datetime
 from typing import Iterable, List, Optional, Tuple, Union
+from tabulate import tabulate
 
 from kanki.exceptions import MissingBookError
 from kanki.card import Card
@@ -13,7 +14,7 @@ from kanki.merriam_webster import MWDictionary
 
 
 def main():
-    logging.basicConfig()
+    logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S')
     # Argument handling
     arg_parser = get_arg_parser()
     args = arg_parser.parse_args()
@@ -216,15 +217,11 @@ class Kanki:
         books = set([book_name[0] for book_name in self.db_cursor.fetchall()])
 
         # Pretty printing
-        max_book_len = max(map(len, books))
-        digits = len(str(max_book_len))
-        spaces_count = 2
-        dashes_count = max_book_len + digits + spaces_count
-
-        print('Books found:')
-        print(f'{"":-<{dashes_count}}')
+        headers = ['ID', 'Lookups', 'Title']
+        rows = []
         for i, book in enumerate(sorted(books)):
-            print(f'{i + 1:<{digits + spaces_count}}{book:<40s}')
+            rows.append([i, self.count_lookups(book), book])
+        print(tabulate(rows, headers=headers))
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups in the given book."""
