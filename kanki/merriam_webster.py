@@ -21,7 +21,7 @@ class MWDictionary:
         """Looks up a word in the dictionary, returning the word itself, its definition and pronunciation."""
         api_request = self.api_base_url + word + '?key=' + self.api_key
 
-        print('Looking up word: ' + word + '... ')
+        logging.info('Looking up word: ' + word)
         response = requests.get(api_request)
 
         self.check_response(response)
@@ -37,12 +37,13 @@ class MWDictionary:
         except KeyError as err:
             # Sometimes the response doesn't have the format we expected, will have to handle these edge cases as they
             # become known.
-            logging.warning(f'Response wasn\'t in the expected format. Reason: key {str(err)} not found')
+            logging.warning(f'API response wasn\'t in the expected format. Reason: key {str(err)} not found')
+            print(f'bad API response')
             raise
         except TypeError:
             # If the response isn't a dictionary, it means we get a list of suggested words so looking up keys won't
             # work.
-            print(f'{word} not found in Merriam-Webster\'s Learner\'s dictionary!')
+            print(f'not found in Merriam-Webster\'s Learner\'s dictionary!')
             raise
 
     @staticmethod

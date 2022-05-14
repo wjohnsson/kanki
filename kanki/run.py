@@ -111,12 +111,12 @@ class Kanki:
 
     def export_book_lookups(self) -> None:
         """Export all lookups in the given book titles to a Kanki readable format."""
-        if not self.all_books_exist():
-            print('Make sure all given book titles match the output given by --list')
+        try:
+            self.book_titles = self.remove_books_until_safe()
+        except MissingBookError:
+            print('Make sure all given book titles match the output given by --list (case insensitive)')
             print('Exiting...')
             sys.exit(1)
-
-        self.book_titles = self.remove_books_until_safe()
 
         cards, failed_words, missing_words = self.create_flashcards()
 
@@ -131,19 +131,6 @@ class Kanki:
               f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
               f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
               f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
-
-    def all_books_exist(self):
-        existing_titles = dict()
-        sql_query = 'SELECT 1 FROM BOOK_INFO WHERE title = ?'
-
-        for title in self.book_titles:
-            self.db_cursor.execute(sql_query, (title,))
-            exists = bool(self.db_cursor.fetchone())
-            existing_titles[title] = exists
-            if not exists:
-                logging.error(f'Title \'{title}\' does not exist in the database')
-
-        return all(existing_titles.values())
 
     def remove_books_until_safe(self) -> List[str]:
         """Remove books until we are below the API query limit."""
@@ -177,7 +164,7 @@ class Kanki:
 
     def get_book_keys(self, book_title: str) -> List[str]:
         """Return the keys used to identify a book in the Kindle vocabulary database."""
-        sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?)'
+        sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?) COLLATE NOCASE'
         self.db_cursor.execute(sql_query, (book_title,))
         book_keys = self.db_cursor.fetchall()
 
@@ -192,16 +179,19 @@ class Kanki:
         missing_words = []  # words not in the dictionary
 
         for book_title in self.book_titles:
-            print(f'\n--- Exporting book: {book_title}')
-
             lookups = self.get_lookups(book_title)
-            for lookup in lookups:
+
+            print(f'--- Exporting {len(lookups)} lookups from book: {book_title}')
+            for i, lookup in enumerate(lookups):
                 word = Kanki.get_word(lookup)
                 sentence = lookup[2]  # the sentence in which the word was looked up
                 author = self.get_author(book_title)
 
                 card = Card(word, sentence, book_title, author)
                 try:
+                    digits = len(str(len(lookups)))
+                    progress = f'[{str(i + 1).zfill(digits)}/{len(lookups)}]'
+                    print(f'{progress} Looking up word {word}... ', end='')
                     card.set_word_meta_data(self.dictionary, word)
                     cards.append(card)
                 except KeyError:
@@ -226,14 +216,13 @@ class Kanki:
         books = set([book_name[0] for book_name in self.db_cursor.fetchall()])
 
         # Pretty printing
-        empty = ''
         max_book_len = max(map(len, books))
         digits = len(str(max_book_len))
         spaces_count = 2
         dashes_count = max_book_len + digits + spaces_count
 
         print('Books found:')
-        print(f'{empty:-<{dashes_count}}')
+        print(f'{"":-<{dashes_count}}')
         for i, book in enumerate(sorted(books)):
             print(f'{i + 1:<{digits + spaces_count}}{book:<40s}')
 
@@ -278,11 +267,14 @@ class Kanki:
 
         if not cards:
             return
-        # Sanity check
-        number_of_fields = len(vars(cards[0]))
-        expected_number_of_fields = len(cards[0].card_fields_in_order())
+        Kanki.check_number_of_card_fields(cards[0])
+
+    @staticmethod
+    def check_number_of_card_fields(card: Card):
+        number_of_fields = len(vars(card))
+        expected_number_of_fields = len(card.card_fields_in_order())
         if number_of_fields > expected_number_of_fields:
-            logging.warning(f'The number of fields in a card have increased,'
+            logging.warning(f'The number of fields in a card have increased, '
                             f'consider adding them to the Anki card type.')
 
     def metadata_about_export(self) -> str:

@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 import pytest_mock
 
@@ -44,10 +46,11 @@ def test_remove_unsafe_book(mocker: pytest_mock.MockerFixture):
         kanki.remove_books_until_safe()
 
 
-def test_count_lookups(setup_database):
+def test_count_lookups(setup_database: sqlite3.Cursor):
     kanki = Kanki(db_cursor=setup_database)
     assert 0 == kanki.count_lookups('"Surely You\'re Joking, Mr. Feynman!": Adventures of a Curious Character')
     assert 3 == kanki.count_lookups('The Stand')
+    assert 3 == kanki.count_lookups('thE staNd'), 'Expected case insensitive SQL query'
     with pytest.raises(MissingBookError):
         kanki.count_lookups('Unknown book')
 
