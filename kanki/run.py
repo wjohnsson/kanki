@@ -94,6 +94,9 @@ def read_api_key_from_file(path: Union[str, bytes, os.PathLike]):
 
 
 class Kanki:
+    successful_words_path = 'kanki_export.txt'
+    failed_words_path = 'kanki_failed_words.txt'
+
     def __init__(self, dictionary=None, db_cursor=None, book_titles=None):
         self.dictionary: Optional[MWDictionary] = dictionary
         self.db_cursor: Optional[sqlite3.Cursor] = db_cursor
@@ -121,25 +124,22 @@ class Kanki:
 
         cards, failed_words, missing_words = self.create_flashcards()
 
-        successful_words_path = 'kanki_export.txt'
-        failed_file_path = 'kanki_failed_words.txt'
-
-        self.write_to_export_file(cards, successful_words_path)
-        self.write_to_export_file(failed_words + missing_words, failed_file_path)
+        self.write_to_export_file(cards, Kanki.successful_words_path)
+        self.write_to_export_file(failed_words + missing_words, Kanki.failed_words_path)
 
         print(f'\n####  EXPORT INFO  ####'
               f'\nBooks exported: {self.book_titles}'
-              f'\nSuccessfully exported {len(cards)} cards to \'{successful_words_path}.\''
-              f'\n{len(failed_words)} words not in expected format, written to {failed_file_path}.'
-              f'\n{len(missing_words)} words not in the online dictionary, also written to {failed_file_path}.')
+              f'\nSuccessfully exported {len(cards)} cards to \'{Kanki.successful_words_path}.\''
+              f'\n{len(failed_words)} words not in expected format, written to {Kanki.failed_words_path}.'
+              f'\n{len(missing_words)} words not in the online dictionary, also written to {Kanki.failed_words_path}.')
 
     def remove_books_until_safe(self) -> List[str]:
         """Remove books until we are below the API query limit."""
         remaining_books = self.book_titles.copy()  # to ensure the function has no side effects
 
-        # TODO: See if this can be replaced with itertools.dropwhile()
         while self.too_many_api_queries(remaining_books):
             remaining_books.pop()
+
             if not remaining_books:
                 logging.error(f'ERROR: kanki cannot handle the case where one book has more than '
                               f'{self.dictionary.max_queries} lookups')
@@ -147,6 +147,7 @@ class Kanki:
                       'Please choose another set of books.')
                 print('Exiting...')
                 sys.exit(1)
+
         return remaining_books
 
     def too_many_api_queries(self, books: List[str]) -> bool:
@@ -193,8 +194,10 @@ class Kanki:
                     digits = len(str(len(lookups)))
                     progress = f'[{str(i + 1).zfill(digits)}/{len(lookups)}]'
                     print(f'{progress} Looking up word {word}... ', end='')
-                    card.set_word_meta_data(self.dictionary, word)
-                    cards.append(card)
+                    word_stem, definitions, ipa = self.dictionary.lookup(word)
+                    card.word = word_stem
+                    card.definitions = definitions
+                    card.pronunciation = ipa
                 except KeyError:
                     failed_words.append(card)
                 except TypeError:
@@ -260,7 +263,7 @@ class Kanki:
             output.write(self.metadata_about_export())
 
             for card in cards:
-                output.write(card.get_csv_encoding())
+                output.write(card.get_csv_encoding() + '\n')
 
         if not cards:
             return
