@@ -48,33 +48,11 @@ def test_remove_unsafe_book(mocker: pytest_mock.MockerFixture):
 
 def test_count_lookups(setup_database: sqlite3.Cursor):
     kanki = Kanki(db_cursor=setup_database)
-    assert 0 == kanki.count_lookups('"Surely You\'re Joking, Mr. Feynman!": Adventures of a Curious Character')
+    assert 1 == kanki.count_lookups('"Surely You\'re Joking, Mr. Feynman!": Adventures of a Curious Character')
     assert 3 == kanki.count_lookups('The Stand')
     assert 3 == kanki.count_lookups('thE staNd'), 'Expected case insensitive SQL query'
     with pytest.raises(MissingBookError):
         kanki.count_lookups('Unknown book')
-
-
-def test_get_book_keys(setup_database):
-    kanki = Kanki(db_cursor=setup_database)
-    # TODO: Add tests where no exception is raised
-    with pytest.raises(MissingBookError):
-        kanki.count_lookups('')
-
-
-def test_get_sql_placeholders():
-    assert Kanki.get_sql_placeholders(1) == '?'
-    assert Kanki.get_sql_placeholders(5) == '?,?,?,?,?'
-    try:
-        Kanki.get_sql_placeholders(999)
-    except ValueError:
-        pytest.fail('Unexpected exception, 999 placeholders should be fine')
-
-
-@pytest.mark.parametrize('amount', [0, -1, -1000, 1000])
-def test_get_invalid_sql_placeholders(amount: int):
-    with pytest.raises(ValueError):
-        Kanki.get_sql_placeholders(amount)
 
 
 def test_flatten():

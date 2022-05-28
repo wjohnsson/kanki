@@ -157,23 +157,15 @@ class Kanki:
 
     def count_lookups(self, book_title: str) -> int:
         """Return the number of Kindle lookups in the given book title."""
-        book_keys = self.get_book_keys(book_title)
-        placeholders = Kanki.get_sql_placeholders(len(book_keys))
-        sql_query = f'SELECT COUNT (*) FROM LOOKUPS WHERE book_key IN ({placeholders})'
-        self.db_cursor.execute(sql_query, book_keys)
+        sql_query = 'SELECT COUNT (*) FROM LOOKUPS LEFT JOIN BOOK_INFO ON BOOK_INFO.id = LOOKUPS.book_key ' \
+                    'WHERE BOOK_INFO.title = ? COLLATE NOCASE'
+        self.db_cursor.execute(sql_query, (book_title, ))
         count = self.db_cursor.fetchone()[0]
+
+        # Assumes all existing books have at least one lookup
+        if not count:
+            raise MissingBookError(f'The book titled {book_title} does have any lookups')
         return count
-
-    def get_book_keys(self, book_title: str) -> List[str]:
-        """Return the keys used to identify a book in the Kindle vocabulary database."""
-        sql_query = 'SELECT id FROM BOOK_INFO WHERE title = (?) COLLATE NOCASE'
-        self.db_cursor.execute(sql_query, (book_title,))
-        book_keys = self.db_cursor.fetchall()
-
-        if not book_keys:
-            raise MissingBookError(f'The book {book_title} is not in the vocabulary database')
-
-        return Kanki.flatten(book_keys)
 
     def create_flashcards(self) -> Tuple[List[Card], List[Card], List[Card]]:
         cards = []  # words successfully found in dictionary
@@ -185,9 +177,9 @@ class Kanki:
 
             print(f'--- Exporting {len(lookups)} lookups from book: {book_title}')
             for i, lookup in enumerate(lookups):
-                word = Kanki.get_word(lookup)
-                sentence = lookup[2]  # the sentence in which the word was looked up
-                author = self.get_author(book_title)
+                word = lookup[0]
+                sentence = lookup[1]
+                author = lookup[3]
 
                 card = Card(word, sentence, book_title, author)
                 try:
@@ -198,19 +190,12 @@ class Kanki:
                     card.word = word_stem
                     card.definitions = definitions
                     card.pronunciation = ipa
+                    cards.append(card)
                 except KeyError:
                     failed_words.append(card)
                 except TypeError:
                     missing_words.append(card)
         return cards, failed_words, missing_words
-
-    @staticmethod
-    def get_word(lookup: tuple) -> str:
-        """Return the word from a Kindle lookup."""
-        word_index = 0
-        assert lookup[word_index][:2] == 'en', 'ERROR: Only english books are supported.'
-        word = lookup[word_index][3:]  # remove 'en:' from word_key
-        return word
 
     def print_books(self) -> None:
         """Print all books in the Kindle database."""
@@ -227,11 +212,17 @@ class Kanki:
         print(tabulate(rows, headers=headers))
 
     def get_lookups(self, book_title: str) -> List[tuple]:
-        """Return all Kindle lookups in the given book."""
-        book_keys = self.get_book_keys(book_title)
-        placeholders = Kanki.get_sql_placeholders(len(book_keys))
-        sql_query = f'SELECT word_key, book_key, usage FROM LOOKUPS WHERE book_key IN ({placeholders})'
-        self.db_cursor.execute(sql_query, book_keys)
+        """Return all Kindle lookups in the given book"""
+        sql_query = '''
+            SELECT WORDS.word, LOOKUPS.usage, BOOK_INFO.title as title, BOOK_INFO.authors, LOOKUPS.timestamp
+                FROM LOOKUPS LEFT JOIN WORDS
+                                ON WORDS.id = LOOKUPS.word_key
+                            LEFT JOIN BOOK_INFO
+                                ON BOOK_INFO.id = LOOKUPS.book_key
+            WHERE title = ? COLLATE NOCASE
+            ORDER BY LOOKUPS.timestamp
+        '''
+        self.db_cursor.execute(sql_query, (book_title, ))
         rows = self.db_cursor.fetchall()
         return rows
 
@@ -241,17 +232,6 @@ class Kanki:
         self.db_cursor.execute(sql_query, (book_title,))
         book_author = self.db_cursor.fetchone()[0]
         return book_author
-
-    @staticmethod
-    def get_sql_placeholders(amount: int) -> str:
-        """Return the SQL string used for a given amount of placeholders."""
-        if amount <= 0:
-            raise ValueError(f'Bad number of placeholders: {amount}, expected a non-zero positive amount')
-        if amount > 999:
-            raise ValueError('sqlite only supports 999 placeholders: '
-                             'https://www.sqlite.org/limits.html#max_variable_number')
-        placeholders = ','.join('?' * amount)
-        return placeholders
 
     @staticmethod
     def flatten(items: List[Iterable]) -> List:

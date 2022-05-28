@@ -20,9 +20,10 @@ def insert_lookups(cursor):
                    '(id text UNIQUE, word_key text, book_key text,'
                    'dict_key text, pos text, usage text, timestamp integer)')
     sample_lookups = [
-        ('ID1:pos:1', 'en:hello', 'ID1', 'D1', 'pos:1', 'hello', 1),
-        ('ID1:pos:2', 'en:foo', 'ID1', 'D1', 'pos:2', 'foo', 2),
-        ('ID1:pos:3', 'en:bar', 'ID1', 'D1', 'pos:3', 'bar', 3),
+        ('ID1:pos:1', 'en:hello', 'ID1', 'dict1', 'pos:1', 'hello sir', 1),
+        ('ID1:pos:2', 'en:foo', 'ID1', 'dict1', 'pos:2', 'foo sentence', 2),
+        ('ID1:pos:3', 'en:bar', 'ID1', 'dict1', 'pos:3', 'bar sentence', 3),
+        ('ID2:pos:1', 'en:physics', 'ID2', 'dict1', 'pos:1', 'Physics are astounding!', 4)
     ]
     cursor.executemany('INSERT INTO LOOKUPS VALUES (?, ?, ?, ?, ?, ?, ?)', sample_lookups)
 
