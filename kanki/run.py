@@ -5,7 +5,7 @@ import os.path
 import sqlite3
 import sys
 from datetime import datetime
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union, Dict
 from tabulate import tabulate
 
 from kanki.exceptions import MissingBookError
@@ -31,21 +31,27 @@ def main():
     if api_key:
         save_api_key_to_file(api_key, api_key_path)
 
-    dictionary_required = args.title or args.word
+    dictionary_required = args.title or args.word or args.id
     if dictionary_required:
         if not api_key:
             api_key = read_api_key_from_file(api_key_path)
         kanki.dictionary = MWDictionary(api_key)
 
-    sql_required = args.list or args.title
+    sql_required = args.list or args.title or args.id
     if sql_required:
         kanki.connect_sql_cursor(args.db_path)
 
         if args.list:
             kanki.print_book_info()
 
+        titles_to_export = []
         if args.title:
-            kanki.book_titles = Kanki.flatten(args.title)
+            titles_to_export = Kanki.flatten(args.title)
+        if args.id:
+            titles_to_export = titles_to_export + kanki.get_book_titles(Kanki.flatten(args.id))
+
+        kanki.book_titles = titles_to_export
+        if titles_to_export:
             kanki.export_book_lookups()
 
     if args.word:
@@ -62,6 +68,11 @@ def get_arg_parser():
                             help='the title(s) of the book(s) to export',
                             nargs='+',
                             action='append')
+    arg_parser.add_argument('-i', '--id',
+                            help='the id(s) of the books(s) to export',
+                            nargs='+',
+                            action='append',
+                            type=int)
     arg_parser.add_argument('-p', '--db_path', type=str, default='vocab.db',
                             help='the path to the vocabulary database (default: ./vocab.db)')
     arg_parser.add_argument('-k', '--key', type=str,
@@ -116,7 +127,8 @@ class Kanki:
     def export_book_lookups(self) -> None:
         """Export all lookups in the given book titles to a Kanki readable format."""
         try:
-            self.book_titles = self.remove_books_until_safe()
+            if self.too_many_api_queries(self.book_titles):
+                self.book_titles = self.remove_books_until_safe()
         except MissingBookError:
             print('Make sure all given book titles match the output given by --list (case insensitive)')
             print('Exiting...')
@@ -130,8 +142,9 @@ class Kanki:
         print(f'\n####  EXPORT INFO  ####'
               f'\nBooks exported: {self.book_titles}'
               f'\nSuccessfully exported {len(cards)} cards to \'{Kanki.successful_words_path}.\''
-              f'\n{len(failed_words)} words not in expected format, written to {Kanki.failed_words_path}.'
-              f'\n{len(missing_words)} words not in the online dictionary, also written to {Kanki.failed_words_path}.')
+              f'\n{len(failed_words)} words not in expected format, written to \'{Kanki.failed_words_path}\'.'
+              f'\n{len(missing_words)} words not in the online dictionary,also written to '
+              f'\'{Kanki.failed_words_path}\'.')
 
     def remove_books_until_safe(self) -> List[str]:
         """Remove books until we are below the API query limit."""
@@ -156,7 +169,7 @@ class Kanki:
         return total_lookups > self.dictionary.max_queries
 
     def count_lookups(self, book_title: str) -> int:
-        """Return the number of Kindle lookups in the given book title."""
+        """Return the number of Kindle lookups in the given book titles."""
         sql_query = '''SELECT COUNT (*) FROM LOOKUPS LEFT JOIN BOOK_INFO ON BOOK_INFO.id = LOOKUPS.book_key
                        WHERE BOOK_INFO.title = ? COLLATE NOCASE'''
         self.db_cursor.execute(sql_query, (book_title, ))
@@ -198,7 +211,17 @@ class Kanki:
         return cards, failed_words, missing_words
 
     def print_book_info(self) -> None:
-        """Print info about all books in the Kindle database. The book with the most recent lookup is at the top."""
+        book_info = [[str(k)] + list(v) for k, v in self.get_book_info().items()]
+        # Limit title length
+        for i, book in enumerate(book_info):
+            if len(book[1]) > 60:
+                book_info[i][1] = book_info[i][1][:60] + '...'
+
+        headers = ['ID', 'Title', 'Lookups', 'Last lookup time']
+        print(tabulate(book_info, headers=headers))
+
+    def get_book_info(self) -> Dict[int, List[str]]:
+        """Get info about all books in the Kindle database. The book with the most recent lookup is at the top."""
         sql_query = '''SELECT
                            ROW_NUMBER() OVER (ORDER BY MAX(timestamp) desc),
                            title,
@@ -212,15 +235,7 @@ class Kanki:
                        ORDER BY
                            MAX(timestamp) desc'''
         self.db_cursor.execute(sql_query)
-        book_info = [list(book) for book in self.db_cursor.fetchall()]
-
-        # Limit title length
-        for i, book in enumerate(book_info):
-            if len(book[1]) > 60:
-                book_info[i][1] = book_info[i][1][:60] + '...'
-
-        headers = ['ID', 'Title', 'Lookups', 'Last lookup time']
-        print(tabulate(book_info, headers=headers))
+        return {book[0]: book[1:] for book in self.db_cursor.fetchall()}
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups for the given book title."""
@@ -275,6 +290,19 @@ class Kanki:
                     '# Format:\n'
                     '# word,pronunciation,sentence,definition,author\n\n')
         return metadata
+
+    def get_book_titles(self, ids: List[int]) -> List[str]:
+        book_info = self.get_book_info()
+        titles, missing = [], False
+        for book_id in ids:
+            if book_id in book_info:
+                titles.append(book_info[book_id][0])
+            else:
+                print(f"Couldn't find book id {book_id}!")
+                missing = True
+        if missing:
+            print("To see a list of available book IDs, run kanki with the --list option")
+        return titles
 
 
 if __name__ == '__main__':
