@@ -42,7 +42,7 @@ def main():
         kanki.connect_sql_cursor(args.db_path)
 
         if args.list:
-            kanki.print_books()
+            kanki.print_book_info()
 
         if args.title:
             kanki.book_titles = Kanki.flatten(args.title)
@@ -157,8 +157,8 @@ class Kanki:
 
     def count_lookups(self, book_title: str) -> int:
         """Return the number of Kindle lookups in the given book title."""
-        sql_query = 'SELECT COUNT (*) FROM LOOKUPS LEFT JOIN BOOK_INFO ON BOOK_INFO.id = LOOKUPS.book_key ' \
-                    'WHERE BOOK_INFO.title = ? COLLATE NOCASE'
+        sql_query = '''SELECT COUNT (*) FROM LOOKUPS LEFT JOIN BOOK_INFO ON BOOK_INFO.id = LOOKUPS.book_key
+                       WHERE BOOK_INFO.title = ? COLLATE NOCASE'''
         self.db_cursor.execute(sql_query, (book_title, ))
         count = self.db_cursor.fetchone()[0]
 
@@ -197,28 +197,31 @@ class Kanki:
                     missing_words.append(card)
         return cards, failed_words, missing_words
 
-    def print_books(self) -> None:
-        """Print all books in the Kindle database."""
-        sql_query = "SELECT title FROM BOOK_INFO"
+    def print_book_info(self) -> None:
+        """Print info about all books in the Kindle database. The book with the most recent lookup is at the top."""
+        sql_query = '''SELECT
+                           ROW_NUMBER() OVER (ORDER BY MAX(timestamp) desc),
+                           title,
+                           COUNT(timestamp),
+                           STRFTIME('%Y-%m-%d', DATETIME(MAX(timestamp) / 1000, 'unixepoch'))
+                       FROM
+                           LOOKUPS
+                           INNER JOIN BOOK_INFO ON book_key = BOOK_INFO.id
+                       GROUP BY
+                           title
+                       ORDER BY
+                           MAX(timestamp) desc'''
         self.db_cursor.execute(sql_query)
-        # Some books seem to appear multiple times, so take only unique
-        books = set([book_name[0] for book_name in self.db_cursor.fetchall()])
 
-        # Pretty printing
-        headers = ['ID', 'Lookups', 'Title']
-        rows = []
-        for i, book in enumerate(sorted(books)):
-            rows.append([i, self.count_lookups(book), book])
-        print(tabulate(rows, headers=headers))
+        headers = ['ID', 'Title', 'Lookups', 'Last lookup time']
+        print(tabulate(self.db_cursor.fetchall(), headers=headers))
 
     def get_lookups(self, book_title: str) -> List[tuple]:
-        """Return all Kindle lookups in the given book"""
+        """Return all Kindle lookups for the given book title."""
         sql_query = '''
             SELECT WORDS.word, LOOKUPS.usage, BOOK_INFO.title as title, BOOK_INFO.authors, LOOKUPS.timestamp
-                FROM LOOKUPS LEFT JOIN WORDS
-                                ON WORDS.id = LOOKUPS.word_key
-                            LEFT JOIN BOOK_INFO
-                                ON BOOK_INFO.id = LOOKUPS.book_key
+              FROM LOOKUPS LEFT JOIN WORDS ON WORDS.id = LOOKUPS.word_key
+                           LEFT JOIN BOOK_INFO ON BOOK_INFO.id = LOOKUPS.book_key
             WHERE title = ? COLLATE NOCASE
             ORDER BY LOOKUPS.timestamp
         '''
