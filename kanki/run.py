@@ -212,9 +212,15 @@ class Kanki:
                        ORDER BY
                            MAX(timestamp) desc'''
         self.db_cursor.execute(sql_query)
+        book_info = [list(book) for book in self.db_cursor.fetchall()]
+
+        # Limit title length
+        for i, book in enumerate(book_info):
+            if len(book[1]) > 60:
+                book_info[i][1] = book_info[i][1][:60] + '...'
 
         headers = ['ID', 'Title', 'Lookups', 'Last lookup time']
-        print(tabulate(self.db_cursor.fetchall(), headers=headers))
+        print(tabulate(book_info, headers=headers))
 
     def get_lookups(self, book_title: str) -> List[tuple]:
         """Return all Kindle lookups for the given book title."""
