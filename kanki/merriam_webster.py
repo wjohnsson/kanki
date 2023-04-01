@@ -37,7 +37,7 @@ class MWDictionary:
         except KeyError as err:
             # Sometimes the response doesn't have the format we expected, will have to handle these edge cases as they
             # become known.
-            logging.warning(f'API response wasn\'t in the expected format. Reason: key {str(err)} not found')
+            logging.warning(f'API response for word {word} wasn\'t in the expected format. Reason: key {str(err)} not found')
             print(f'bad API response')
             raise
         except TypeError:

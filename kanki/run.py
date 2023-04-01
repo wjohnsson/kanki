@@ -141,9 +141,9 @@ class Kanki:
 
         print(f'\n####  EXPORT INFO  ####'
               f'\nBooks exported: {self.book_titles}'
-              f'\nSuccessfully exported {len(cards)} cards to \'{Kanki.successful_words_path}.\''
-              f'\n{len(failed_words)} words not in expected format, written to \'{Kanki.failed_words_path}\'.'
-              f'\n{len(missing_words)} words not in the online dictionary,also written to '
+              f'\n- {len(cards)} cards successfully exported to \'{Kanki.successful_words_path}.\''
+              f'\n- {len(failed_words)} words not in expected format, written to \'{Kanki.failed_words_path}\'.'
+              f'\n- {len(missing_words)} words not in the online dictionary, also written to '
               f'\'{Kanki.failed_words_path}\'.')
 
     def remove_books_until_safe(self) -> List[str]:
